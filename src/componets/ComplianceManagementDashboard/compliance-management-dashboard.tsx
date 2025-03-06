@@ -54,7 +54,6 @@ const ComplianceManagementDashboard = () => {
     // Simulate initial compliance assessment
     initializeComplianceStatus();
     generateUserConsents();
-    calculatePrivacyScore();
   }, []);
 
   // Initialize compliance status for regulations
@@ -73,6 +72,8 @@ const ComplianceManagementDashboard = () => {
     const active = Object.keys(COMPLIANCE_REGULATIONS)
       .filter(() => Math.random() > 0.5);
     setActiveRegulations(active);
+
+    calculatePrivacyScore();
   };
 
   // Generate user consent states
@@ -82,6 +83,8 @@ const ComplianceManagementDashboard = () => {
       consents[type] = Math.random() > 0.5;
     });
     setUserConsents(consents);
+
+    calculatePrivacyScore();
   };
 
   // Calculate overall privacy score
