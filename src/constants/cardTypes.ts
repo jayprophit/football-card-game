@@ -1,4 +1,36 @@
 export const CARD_TYPES = {
+  King: {
+    name: 'King',
+    color: 'red',
+    movementType: 'King-like',
+    movementRules: {
+      maxSquares: 1
+    }
+  },
+  Rook: {
+    name: 'Rook',
+    color: 'blue',
+    movementType: 'Rook-like',
+    movementRules: {
+      maxSquares: 8
+    }
+  },
+  Knight: {
+    name: 'Knight',
+    color: 'green',
+    movementType: 'Knight-like',
+    movementRules: {
+      maxSquares: 3
+    }
+  },
+  Bishop: {
+    name: 'Bishop',
+    color: 'yellow',
+    movementType: 'Bishop-like',
+    movementRules: {
+      maxSquares: 8
+    }
+  },
   GOALKEEPER: {
     name: 'Goalkeeper',
     description: 'Defensive specialist with limited movement',

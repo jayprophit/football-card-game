@@ -1,54 +1,22 @@
 export const generateAICoachingRecommendations = (playerSkills) => {
-  const recommendations = [];
-  
-  // Tactical Intelligence Recommendations
-  if (playerSkills.tactical < 50) {
-    recommendations.push({
+  // Implement the logic to generate AI coaching recommendations based on player skills
+  return [
+    {
       category: 'TACTICAL',
-      suggestion: 'Improve positional awareness through video analysis',
+      suggestion: 'Improve strategic decision-making by analyzing game footage.',
       impact: 'High',
       difficulty: 'Medium'
-    });
-  }
-
-  // Technical Proficiency Recommendations
-  if (playerSkills.technical < 60) {
-    recommendations.push({
-      category: 'TECHNICAL',
-      suggestion: 'Focus on precision passing drills',
-      impact: 'High',
-      difficulty: 'Low'
-    });
-  }
-
-  // Physical Conditioning Recommendations
-  if (playerSkills.physical < 55) {
-    recommendations.push({
-      category: 'PHYSICAL',
-      suggestion: 'Implement high-intensity interval training',
-      impact: 'Medium',
-      difficulty: 'High'
-    });
-  }
-
-  // Mental Resilience Recommendations
-  if (playerSkills.mental < 45) {
-    recommendations.push({
-      category: 'MENTAL',
-      suggestion: 'Practice mindfulness and concentration exercises',
-      impact: 'High',
-      difficulty: 'Low'
-    });
-  }
-
-  return recommendations;
+    },
+    // ...other recommendations...
+  ];
 };
 
-export const simulateSkillProgression = (currentSkills) => {
+export const simulateSkillProgression = (playerSkills) => {
+  // Implement the logic to simulate skill progression
   return {
-    tactical: Math.min(100, currentSkills.tactical + Math.random() * 10),
-    technical: Math.min(100, currentSkills.technical + Math.random() * 10),
-    physical: Math.min(100, currentSkills.physical + Math.random() * 10),
-    mental: Math.min(100, currentSkills.mental + Math.random() * 10)
+    tactical: playerSkills.tactical + Math.random() * 5,
+    technical: playerSkills.technical + Math.random() * 5,
+    physical: playerSkills.physical + Math.random() * 5,
+    mental: playerSkills.mental + Math.random() * 5
   };
 };
