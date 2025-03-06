@@ -1,0 +1,142 @@
+.container {
+  max-width: 1200px;
+  margin: 0 auto;
+  padding: 16px;
+}
+
+.grid {
+  display: grid;
+  gap: 8px;
+}
+
+.grid-cols-8 {
+  grid-template-columns: repeat(8, 1fr);
+}
+
+.grid-cols-3 {
+  grid-template-columns: repeat(3, 1fr);
+}
+
+.w-12 {
+  width: 3rem;
+}
+
+.h-12 {
+  height: 3rem;
+}
+
+.border {
+  border: 1px solid #ccc;
+}
+
+.bg-blue-100 {
+  background-color: #ebf8ff;
+}
+
+.bg-green-100 {
+  background-color: #f0fff4;
+}
+
+.bg-yellow-100 {
+  background-color: #fffbeb;
+}
+
+.bg-red-100 {
+  background-color: #fef2f2;
+}
+
+.flex {
+  display: flex;
+}
+
+.items-center {
+  align-items: center;
+}
+
+.justify-center {
+  justify-content: center;
+}
+
+.cursor-pointer {
+  cursor: pointer;
+}
+
+.hover\:bg-opacity-50:hover {
+  background-opacity: 0.5;
+}
+
+.w-10 {
+  width: 2.5rem;
+}
+
+.h-10 {
+  height: 2.5rem;
+}
+
+.rounded-full {
+  border-radius: 9999px;
+}
+
+.text-white {
+  color: #fff;
+}
+
+.text-xs {
+  font-size: 0.75rem;
+}
+
+.font-bold {
+  font-weight: 700;
+}
+
+.mb-2 {
+  margin-bottom: 0.5rem;
+}
+
+.mb-4 {
+  margin-bottom: 1rem;
+}
+
+.p-2 {
+  padding: 0.5rem;
+}
+
+.p-4 {
+  padding: 1rem;
+}
+
+.rounded {
+  border-radius: 0.25rem;
+}
+
+.bg-gray-100 {
+  background-color: #f7fafc;
+}
+
+.bg-blue-500 {
+  background-color: #4299e1;
+}
+
+.bg-green-500 {
+  background-color: #48bb78;
+}
+
+.bg-gray-200 {
+  background-color: #edf2f7;
+}
+
+.text-2xl {
+  font-size: 1.5rem;
+}
+
+.text-xs {
+  font-size: 0.75rem;
+}
+
+.space-x-2 > :not(:last-child) {
+  margin-right: 0.5rem;
+}
+
+.space-x-4 > :not(:last-child) {
+  margin-right: 1rem;
+}
