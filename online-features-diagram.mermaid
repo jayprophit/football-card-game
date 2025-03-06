@@ -1,0 +1,60 @@
+flowchart TB
+    subgraph Client["Client Applications"]
+        Web["Web Platform"]
+        iOS["iOS App Store"]
+        Android["Google Play Store"]
+        Desktop["Desktop Application"]
+    end
+
+    subgraph API["API Gateway"]
+        REST["RESTful Endpoints"]
+        WS["WebSocket Server"]
+        GraphQL["GraphQL API"]
+    end
+
+    subgraph Core["Core Services"]
+        Auth["Authentication\n(OAuth 2.0)"]
+        GameServer["Game Engine Server"]
+        MatchMaking["Matchmaking Service"]
+        Social["Social & Friends API"]
+        Tournament["Tournament System"]
+        
+        subgraph Analytics["Analytics Pipeline"]
+            Telemetry["Telemetry Collector"]
+            ML["Machine Learning\nRecommendations"]
+        end
+    end
+
+    subgraph Storage["Data Storage"]
+        MongoDB["MongoDB\n(User & Game Data)"]
+        Redis["Redis\n(Caching & Sessions)"]
+        S3["S3 Storage\n(Media & Assets)"]
+        PostgreSQL["PostgreSQL\n(Statistics & Analytics)"]
+    end
+    
+    subgraph External["External Services"]
+        Push["Push Notifications"]
+        Cloud["Cloud Saves"]
+        Payment["Payment Processing"]
+        GameCenter["Game Center / Play Games"]
+    end
+
+    Client --> API
+    API --> Core
+    Core --> Storage
+    Core --> External
+    Analytics --> Core
+    
+    %% Specific connections
+    Web --> REST & WS & GraphQL
+    iOS --> REST & WS
+    Android --> REST & WS
+    Desktop --> REST & WS
+    
+    GameServer --> MongoDB & Redis
+    GameServer --> Tournament
+    Tournament --> PostgreSQL
+    MatchMaking --> Redis
+    Social --> MongoDB
+    Telemetry --> PostgreSQL
+    

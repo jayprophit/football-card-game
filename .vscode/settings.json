@@ -1,0 +1,56 @@
+{
+    "deepscan.enable": true,
+    "dev.containers": {
+        "dockerComposeFile": [
+            "../docker-compose.yml",
+            "../docker-compose.override.yml"
+        ],
+        "service": "app",
+        "workspaceFolder": "/workspace",
+        "shutdownAction": "stopCompose"
+    },
+    "docker.commands": {
+        "build": "docker-compose build",
+        "up": "docker-compose up",
+        "down": "docker-compose down"
+    },
+    "dotenv.enableAutocloak": true,
+    "dotenv.files": [
+        ".env",
+        ".env.local",
+        ".env.development",
+        ".env.production"
+    ],
+    "files.associations": {
+        "*.google": "json",
+        "*.android": "json",
+        "*.ios": "json",
+        "*.macos": "json",
+        "*.windows": "json",
+        "*.linux": "json"
+    },
+    "terminal.integrated.profiles.linux": {
+        "bash": {
+            "path": "bash"
+        },
+        "zsh": {
+            "path": "zsh"
+        }
+    },
+    "terminal.integrated.profiles.windows": {
+        "PowerShell": {
+            "source": "PowerShell"
+        },
+        "Command Prompt": {
+            "path": "cmd.exe"
+        }
+    },
+    "terminal.integrated.profiles.osx": {
+        "bash": {
+            "path": "bash"
+        },
+        "zsh": {
+            "path": "zsh"
+        }
+    }
+}

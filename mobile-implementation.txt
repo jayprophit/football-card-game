@@ -1,0 +1,1224 @@
+// FootballChess Mobile Implementation using React Native
+import React, { useState, useEffect } from 'react';
+import {
+  SafeAreaView,
+  View,
+  Text,
+  TouchableOpacity,
+  Image,
+  StyleSheet,
+  Alert,
+  ScrollView,
+  Dimensions,
+  Modal
+} from 'react-native';
+import { Camera } from 'expo-camera';
+import * as ImageManipulator from 'expo-image-manipulator';
+import * as FileSystem from 'expo-file-system';
+
+const { width, height } = Dimensions.get('window');
+
+// Game Board Component
+const GameBoard = ({ gameState, onSquarePress, currentTeam, movesRemaining, selectedPlayer, possibleMoves, passMode, possiblePasses }) => {
+  // Board dimensions: 20x10 grid (5 columns per section, 10 rows)
+  const columns = 20;
+  const rows = 10;
+  
+  // Calculate square size based on screen width
+  const squareSize = (width - 20) / 10; // 10 visible columns at a time
+  
+  // Calculate board width and height
+  const boardWidth = squareSize * 10;
+  const boardHeight = squareSize * 10;
+  
+  // Current scroll position and visible range
+  const [scrollX, setScrollX] = useState(0);
+  const visibleStartCol = Math.floor(scrollX / squareSize);
+  const visibleEndCol = visibleStartCol + 9;
+  
+  // Render a single square
+  const renderSquare = (col, row) => {
+    const squareId = `${col}-${row}`;
+    const players = gameState.playersOnSquare(col, row);
+    const hasBall = gameState.isBallOnSquare(col, row);
+    
+    // Determine if this square is a goal area
+    const isGoalArea = (col === 0 && row >= 4 && row <= 6) || 
+                       (col === 19 && row >= 4 && row <= 6);
+    
+    // Determine the zone (for visual styling)
+    let zone = 'midfield';
+    if (col < 5) zone = 'defensive';
+    else if (col >= 15) zone = 'attacking';
+    
+    // Check if this square is a possible move or pass destination
+    const isPossibleMove = selectedPlayer && possibleMoves.some(move => move.col === col && move.row === row);
+    const isPossiblePass = passMode && possiblePasses.some(pass => pass.coordinates.col === col && pass.coordinates.row === row);
+    
+    // Determine if square is selected (has the selected player)
+    const isSelected = selectedPlayer && players.some(p => p.id === selectedPlayer.id);
+    
+    // Group players by team
+    const homeTeamPlayers = players.filter(player => player.team === 'home');
+    const awayTeamPlayers = players.filter(player => player.team === 'away');
+    
+    return (
+      <TouchableOpacity
+        key={squareId}
+        style={[
+          styles.square,
+          zone === 'defensive' && styles.defensiveZone,
+          zone === 'attacking' && styles.attackingZone,
+          isGoalArea && styles.goalArea,
+          isPossibleMove && styles.possibleMove,
+          isPossiblePass && styles.possiblePass,
+          isSelected && styles.selectedSquare,
+          { width: squareSize, height: squareSize }
+        ]}
+        onPress={() => onSquarePress(col, row)}
+      >
+        {hasBall && <View style={styles.ball} />}
+        
+        {homeTeamPlayers.length > 0 && (
+          <View style={[styles.playerStack, styles.homeTeam]}>
+            <Text style={styles.playerCount}>{homeTeamPlayers.length}</Text>
+            <Text style={styles.playerPosition}>{homeTeamPlayers[0].position}</Text>
+          </View>
+        )}
+        
+        {awayTeamPlayers.length > 0 && (
+          <View style={[styles.playerStack, styles.awayTeam]}>
+            <Text style={styles.playerCount}>{awayTeamPlayers.length}</Text>
+            <Text style={styles.playerPosition}>{awayTeamPlayers[0].position}</Text>
+          </View>
+        )}
+      </TouchableOpacity>
+    );
+  };
+  
+  // Generate the grid rows and columns
+  const renderGrid = () => {
+    const grid = [];
+    
+    for (let row = 0; row < rows; row++) {
+      const rowSquares = [];
+      
+      for (let col = 0; col < columns; col++) {
+        rowSquares.push(renderSquare(col, row));
+      }
+      
+      grid.push(
+        <View key={`row-${row}`} style={styles.boardRow}>
+          {rowSquares}
+        </View>
+      );
+    }
+    
+    return grid;
+  };
+  
+  return (
+    <View style={styles.boardContainer}>
+      <View style={styles.boardStatus}>
+        <Text style={styles.teamTurn}>
+          {currentTeam === 'home' ? 'Home Team' : 'Away Team'}'s Turn
+        </Text>
+        <Text style={styles.movesRemaining}>
+          Moves: {movesRemaining}
+        </Text>
+      </View>
+      
+      <ScrollView
+        horizontal
+        pagingEnabled
+        showsHorizontalScrollIndicator={false}
+        style={styles.boardScroll}
+        onScroll={(event) => {
+          setScrollX(event.nativeEvent.contentOffset.x);
+        }}
+        scrollEventThrottle={16}
+      >
+        <View style={[styles.board, { width: columns * squareSize, height: boardHeight }]}>
+          {renderGrid()}
+        </View>
+      </ScrollView>
+      
+      <View style={styles.scrollIndicator}>
+        <Text style={styles.scrollIndicatorText}>
+          Viewing columns {visibleStartCol + 1}-{visibleEndCol + 1} of {columns}
+        </Text>
+      </View>
+    </View>
+  );
+};
+
+// Player Card Component
+const PlayerCard = ({ player, isSelected, onSelect }) => {
+  return (
+    <TouchableOpacity 
+      style={[
+        styles.playerCard,
+        isSelected && styles.selectedPlayerCard,
+        player.hasYellowCard && styles.yellowCardPlayer,
+        player.hasRedCard && styles.redCardPlayer
+      ]}
+      onPress={() => onSelect(player.id)}
+    >
+      <View style={styles.cardHeader}>
+        <Text style={styles.playerPosition}>{player.position}</Text>
+        <Text style={styles.playerNumber}>{player.number}</Text>
+      </View>
+      
+      <View style={styles.playerPhoto}>
+        {player.photoUrl ? (
+          <Image 
+            source={{ uri: player.photoUrl }} 
+            style={styles.playerPhotoImage}
+            resizeMode="cover"
+          />
+        ) : (
+          <View style={styles.playerPhotoPlaceholder}>
+            <Text style={styles.playerInitial}>
+              {player.name.charAt(0)}
+            </Text>
+          </View>
+        )}
+        
+        {player.injury && (
+          <View style={[
+            styles.injuryIndicator,
+            player.injury.severity === 'minor' && styles.minorInjury,
+            player.injury.severity === 'serious' && styles.seriousInjury,
+            player.injury.severity === 'season ending' && styles.majorInjury
+          ]}>
+            <Text style={styles.injuryText}>
+              {player.injury.severity.charAt(0)}
+            </Text>
+          </View>
+        )}
+      </View>
+      
+      <View style={styles.cardFooter}>
+        <Text style={styles.playerName} numberOfLines={1}>
+          {player.name}
+        </Text>
+        <Text style={styles.movementPattern}>
+          {player.movementPattern}
+        </Text>
+      </View>
+    </TouchableOpacity>
+  );
+};
+
+// Control Panel Component
+const ControlPanel = ({ 
+  selectedPlayer, 
+  possibleMoves, 
+  onPass, 
+  onShoot, 
+  onEndTurn, 
+  gameState,
+  matchTime
+}) => {
+  return (
+    <View style={styles.controlPanel}>
+      <View style={styles.scoreDisplay}>
+        <Text style={styles.homeScore}>{gameState.score.home}</Text>
+        <Text style={styles.scoreDivider}>-</Text>
+        <Text style={styles.awayScore}>{gameState.score.away}</Text>
+      </View>
+      
+      <View style={styles.matchInfo}>
+        <Text style={styles.matchTime}>{matchTime}'</Text>
+        <Text style={styles.turnCount}>Turn {gameState.turnCounter}</Text>
+      </View>
+      
+      <View style={styles.actionButtons}>
+        {selectedPlayer ? (
+          <>
+            <TouchableOpacity
+              style={[
+                styles.actionButton,
+                !gameState.canPass(selectedPlayer.id) && styles.disabledButton
+              ]}
+              onPress={onPass}
+              disabled={!gameState.canPass(selectedPlayer.id)}
+            >
+              <Text style={styles.buttonText}>Pass</Text>
+            </TouchableOpacity>
+            
+            <TouchableOpacity
+              style={[
+                styles.actionButton,
+                !gameState.canShoot(selectedPlayer.id) && styles.disabledButton
+              ]}
+              onPress={onShoot}
+              disabled={!gameState.canShoot(selectedPlayer.id)}
+            >
+              <Text style={styles.buttonText}>Shoot</Text>
+            </TouchableOpacity>
+          </>
+        ) : (
+          <Text style={styles.selectPrompt}>Select a player</Text>
+        )}
+        
+        <TouchableOpacity
+          style={[styles.actionButton, styles.endTurnButton]}
+          onPress={onEndTurn}
+        >
+          <Text style={styles.buttonText}>End Turn</Text>
+        </TouchableOpacity>
+      </View>
+    </View>
+  );
+};
+
+// Player Photo Capture Component
+const PlayerPhotoCapture = ({ onCapture, onCancel }) => {
+  const [hasPermission, setHasPermission] = useState(null);
+  const [camera, setCamera] = useState(null);
+  
+  useEffect(() => {
+    (async () => {
+      const { status } = await Camera.requestCameraPermissionsAsync();
+      setHasPermission(status === 'granted');
+    })();
+  }, []);
+  
+  const takePicture = async () => {
+    if (camera) {
+      const photo = await camera.takePictureAsync();
+      
+      // Resize and crop to square for consistency
+      const manipulatedImage = await ImageManipulator.manipulateAsync(
+        photo.uri,
+        [{ resize: { width: 300, height: 300 } }],
+        { format: ImageManipulator.SaveFormat.JPEG }
+      );
+      
+      // Generate a local file path to store the image
+      const fileName = `player_${Date.now()}.jpg`;
+      const filePath = `${FileSystem.documentDirectory}${fileName}`;
+      
+      // Save image to local storage
+      await FileSystem.moveAsync({
+        from: manipulatedImage.uri,
+        to: filePath
+      });
+      
+      // Pass the filepath back to the parent component
+      onCapture(filePath);
+    }
+  };
+  
+  if (hasPermission === null) {
+    return <View style={styles.cameraContainer}><Text>Requesting camera permission...</Text></View>;
+  }
+  
+  if (hasPermission === false) {
+    return <View style={styles.cameraContainer}><Text>No access to camera</Text></View>;
+  }
+  
+  return (
+    <View style={styles.cameraContainer}>
+      <Camera
+        style={styles.camera}
+        type={Camera.Constants.Type.front}
+        ref={ref => setCamera(ref)}
+      >
+        <View style={styles.cameraControls}>
+          <TouchableOpacity style={styles.cancelButton} onPress={onCancel}>
+            <Text style={styles.cancelButtonText}>Cancel</Text>
+          </TouchableOpacity>
+          
+          <TouchableOpacity style={styles.captureButton} onPress={takePicture}>
+            <View style={styles.captureButtonInner} />
+          </TouchableOpacity>
+        </View>
+      </Camera>
+    </View>
+  );
+};
+
+// Game Log Component
+const GameLog = ({ gameState, matchTime }) => {
+  return (
+    <View style={styles.gameLog}>
+      <Text style={styles.gameLogTitle}>Match Events</Text>
+      <ScrollView style={styles.logEntries}>
+        {gameState.lastFoul && (
+          <View style={[styles.logEntry, styles.foulEntry]}>
+            <Text style={styles.logTime}>{matchTime}'</Text>
+            <Text style={styles.logContent}>
+              {gameState.lastFoul.type} by {gameState.lastFoul.team} team - 
+              Result: {gameState.lastFoul.result}
+              {gameState.lastFoul.player && ` (${gameState.lastFoul.player})`}
+            </Text>
+          </View>
+        )}
+        
+        {gameState.lastInjury && (
+          <View style={[styles.logEntry, styles.injuryEntry]}>
+            <Text style={styles.logTime}>{matchTime}'</Text>
+            <Text style={styles.logContent}>
+              {gameState.lastInjury.severity} injury to {gameState.lastInjury.player} 
+              ({gameState.lastInjury.team} team)
+            </Text>
+          </View>
+        )}
+      </ScrollView>
+    </View>
+  );
+};
+
+// Game Phase Overlay Component
+const GamePhaseOverlay = ({ phase, score, onContinue }) => {
+  if (phase === 'play') return null;
+  
+  return (
+    <Modal transparent visible animationType="fade">
+      <View style={styles.overlay}>
+        <View style={styles.overlayContent}>
+          <Text style={styles.overlayTitle}>
+            {phase === 'half-time' ? 'Half Time' : 'Full Time'}
+          </Text>
+          
+          <Text style={styles.overlayScore}>
+            {score.home} - {score.away}
+          </Text>
+          
+          {phase === 'full-time' && (
+            <Text style={styles.overlayWinner}>
+              {score.home > score.away ? 'Home Team Wins!' : 
+               score.home < score.away ? 'Away Team Wins!' : 'It\'s a Draw!'}
+            </Text>
+          )}
+          
+          <TouchableOpacity style={styles.overlayButton} onPress={onContinue}>
+            <Text style={styles.overlayButtonText}>
+              {phase === 'half-time' ? 'Start Second Half' : 'Play Again'}
+            </Text>
+          </TouchableOpacity>
+        </View>
+      </View>
+    </Modal>
+  );
+};
+
+// Main Game Component
+const FootballChessGame = () => {
+  // Game state
+  const [gameState, setGameState] = useState(null);
+  const [selectedPlayer, setSelectedPlayer] = useState(null);
+  const [possibleMoves, setPossibleMoves] = useState([]);
+  const [possiblePasses, setPossiblePasses] = useState([]);
+  const [passMode, setPassMode] = useState(false);
+  const [currentTeam, setCurrentTeam] = useState('home');
+  const [movesRemaining, setMovesRemaining] = useState(3);
+  const [gamePhase, setGamePhase] = useState('play');
+  const [matchTime, setMatchTime] = useState(0);
+  
+  // Photo capture mode
+  const [captureMode, setCaptureMode] = useState(false);
+  const [playerToUpdate, setPlayerToUpdate] = useState(null);
+  
+  // Initialize game
+  useEffect(() => {
+    const initialGameState = initializeGame();
+    setGameState(initialGameState);
+    
+    // Set up match time simulation
+    const timeInterval = setInterval(() => {
+      setMatchTime(prevTime => {
+        const newTime = prevTime + 1;
+        
+        // Check for half-time at 45 minutes
+        if (newTime === 45 && gamePhase === 'play') {
+          setGamePhase('half-time');
+        }
+        
+        // Check for full-time at 90 minutes
+        if (newTime === 90) {
+          setGamePhase('full-time');
+          clearInterval(timeInterval);
+        }
+        
+        return newTime;
+      });
+    }, 30000); // Each real-world minute = 30 seconds
+    
+    return () => clearInterval(timeInterval);
+  }, [gamePhase]);
+  
+  // Handle game phase transitions
+  const handlePhaseTransition = () => {
+    if (gamePhase === 'half-time') {
+      setGamePhase('play');
+      // Implement half-time logic here (like switching sides)
+    } else if (gamePhase === 'full-time') {
+      // Reset game
+      const initialGameState = initializeGame();
+      setGameState(initialGameState);
+      setCurrentTeam('home');
+      setMovesRemaining(3);
+      setSelectedPlayer(null);
+      setPossibleMoves([]);
+      setPassMode(false);
+      setMatchTime(0);
+      setGamePhase('play');
+    }
+  };
+  
+  // Initialize the game
+  const initializeGame = () => {
+    // Create players for both teams
+    const players = [
+      // Home Team
+      { id: 'h1', team: 'home', name: 'Smith', position: 'GK', number: 1, col: 1, row: 5, 
+        movementPattern: 'king', onField: true, hasBall: false },
+      { id: 'h2', team: 'home', name: 'Jones', position: 'LB', number: 2, col: 3, row: 2, 
+        movementPattern: 'bishop', onField: true, hasBall: false },
+      // ... more players (as shown in the web implementation)
+    ];
+    
+    // Initial ball position
+    const ball = { col: 9, row: 5 }; // With the home team striker
+    
+    // Return game state object with helper methods
+    return {
+      players,
+      ball,
+      score: { home: 0, away: 0 },
+      turnCounter: 1,
+      lastFoul: null,
+      lastInjury: null,
+      
+      // Helper methods (similar to web implementation)
+      playersOnSquare: (col, row) => {
+        return players.filter(p => p.col === col && p.row === row && p.onField);
+      },
+      
+      isBallOnSquare: (col, row) => {
+        return ball.col === col && ball.row === row;
+      },
+      
+      getPossibleMoves: (playerId) => {
+        const player = players.find(p => p.id === playerId);
+        if (!player || !player.onField) return [];
+        
+        // Generate possible moves based on movement pattern
+        return generatePossibleMoves(player, players);
+      },
+      
+      canPass: (playerId) => {
+        const player = players.find(p => p.id === playerId);
+        return player && player.hasBall;
+      },
+      
+      canShoot: (playerId) => {
+        const player = players.find(p => p.id === playerId);
+        if (!player || !player.hasBall) return false;
+        
+        // Check if player is in shooting range
+        if (player.team === 'home') {
+          return player.col >= 16;
+        } else {
+          return player.col <= 3;
+        }
+      }
+    };
+  };
+  
+  // Handle square press on the board
+  const handleSquarePress = (col, row) => {
+    // Implementation similar to web version
+  };
+  
+  // Function to handle passing the ball
+  const handlePass = () => {
+    // Implementation similar to web version
+  };
+  
+  // Function to handle shooting at goal
+  const handleShoot = () => {
+    // Implementation similar to web version
+  };
+  
+  // Function to end the current turn
+  const endTurn = () => {
+    setCurrentTeam(prev => prev === 'home' ? 'away' : 'home');
+    setMovesRemaining(3);
+    setSelectedPlayer(null);
+    setPossibleMoves([]);
+    setPassMode(false);
+    
+    // Increment turn counter
+    setGameState(prev => ({
+      ...prev,
+      turnCounter: prev.turnCounter + 1
+    }));
+  };
+  
+  // Function to handle player photo capture
+  const handlePhotoCapture = (photoUri) => {
+    if (playerToUpdate) {
+      setGameState(prevState => {
+        const newState = { ...prevState };
+        const player = newState.players.find(p => p.id === playerToUpdate);
+        
+        if (player) {
+          player.photoUrl = photoUri;
+        }
+        
+        return newState;
+      });
+    }
+    
+    setCaptureMode(false);
+    setPlayerToUpdate(null);
+  };
+  
+  // Render the game UI
+  if (!gameState) {
+    return (
+      <SafeAreaView style={styles.container}>
+        <Text style={styles.loadingText}>Loading game...</Text>
+      </SafeAreaView>
+    );
+  }
+  
+  return (
+    <SafeAreaView style={styles.container}>
+      <Text style={styles.gameTitle}>FootballChess</Text>
+      
+      <GamePhaseOverlay 
+        phase={gamePhase} 
+        score={gameState.score} 
+        onContinue={handlePhaseTransition} 
+      />
+      
+      {captureMode ? (
+        <PlayerPhotoCapture 
+          onCapture={handlePhotoCapture}
+          onCancel={() => {
+            setCaptureMode(false);
+            setPlayerToUpdate(null);
+          }}
+        />
+      ) : (
+        <>
+          <GameBoard
+            gameState={gameState}
+            onSquarePress={handleSquarePress}
+            currentTeam={currentTeam}
+            movesRemaining={movesRemaining}
+            selectedPlayer={selectedPlayer}
+            possibleMoves={possibleMoves}
+            passMode={passMode}
+            possiblePasses={possiblePasses}
+          />
+          
+          <ControlPanel
+            selectedPlayer={selectedPlayer}
+            possibleMoves={possibleMoves}
+            onPass={handlePass}
+            onShoot={handleShoot}
+            onEndTurn={endTurn}
+            gameState={gameState}
+            matchTime={matchTime}
+          />
+          
+          <View style={styles.playerSelectionContainer}>
+            <Text style={styles.sectionTitle}>
+              {currentTeam === 'home' ? 'Home' : 'Away'} Team Players
+            </Text>
+            <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.playerCards}>
+              {gameState.players
+                .filter(player => player.team === currentTeam && player.onField)
+                .map(player => (
+                  <View key={player.id} style={styles.playerCardWrapper}>
+                    <PlayerCard
+                      player={player}
+                      isSelected={selectedPlayer && selectedPlayer.id === player.id}
+                      onSelect={(playerId) => {
+                        setSelectedPlayer(gameState.players.find(p => p.id === playerId));
+                        setPossibleMoves(gameState.getPossibleMoves(playerId));
+                        setPassMode(false);
+                      }}
+                    />
+                    <TouchableOpacity 
+                      style={styles.addPhotoButton}
+                      onPress={() => {
+                        setPlayerToUpdate(player.id);
+                        setCaptureMode(true);
+                      }}
+                    >
+                      <Text style={styles.addPhotoText}>📷</Text>
+                    </TouchableOpacity>
+                  </View>
+                ))
+              }
+            </ScrollView>
+          </View>
+          
+          <GameLog gameState={gameState} matchTime={matchTime} />
+        </>
+      )}
+    </SafeAreaView>
+  );
+};
+
+// Styles
+const styles = StyleSheet.create({
+  container: {
+    flex: 1,
+    backgroundColor: '#f7f7f7',
+    padding: 10,
+  },
+  gameTitle: {
+    fontSize: 24,
+    fontWeight: 'bold',
+    textAlign: 'center',
+    marginBottom: 10,
+  },
+  loadingText: {
+    fontSize: 18,
+    textAlign: 'center',
+    marginTop: 50,
+  },
+  
+  // Board styles
+  boardContainer: {
+    backgroundColor: '#f0f0f0',
+    borderRadius: 5,
+    padding: 5,
+    marginBottom: 10,
+  },
+  boardStatus: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    marginBottom: 5,
+  },
+  teamTurn: {
+    fontWeight: 'bold',
+  },
+  movesRemaining: {
+    fontWeight: 'bold',
+  },
+  boardScroll: {
+    height: width * 0.8, // Make the board height proportional to the width
+  },
+  board: {
+    backgroundColor: '#4CAF50',
+    borderWidth: 2,
+    borderColor: '#333',
+  },
+  boardRow: {
+    flexDirection: 'row',
+  },
+  square: {
+    backgroundColor: '#4CAF50',
+    borderWidth: 0.5,
+    borderColor: 'rgba(255,255,255,0.3)',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  defensiveZone: {
+    backgroundColor: '#388E3C',
+  },
+  attackingZone: {
+    backgroundColor: '#66BB6A',
+  },
+  goalArea: {
+    backgroundColor: '#9C27B0',
+    opacity: 0.3,
+  },
+  possibleMove: {
+    borderWidth: 2,
+    borderColor: '#FFEB3B',
+  },
+  possiblePass: {
+    borderWidth: 2,
+    borderColor: '#2196F3',
+  },
+  selectedSquare: {
+    borderWidth: 2,
+    borderColor: '#FFC107',
+  },
+  ball: {
+    width: 10,
+    height: 10,
+    borderRadius: 5,
+    backgroundColor: 'white',
+    borderWidth: 1,
+    borderColor: 'black',
+    position: 'absolute',
+    zIndex: 10,
+  },
+  playerStack: {
+    width: 20,
+    height: 25,
+    borderRadius: 3,
+    justifyContent: 'center',
+    alignItems: 'center',
+    margin: 1,
+  },
+  homeTeam: {
+    backgroundColor: '#FF5722',
+  },
+  awayTeam: {
+    backgroundColor: '#2196F3',
+  },
+  playerCount: {
+    position: 'absolute',
+    top: -5,
+    right: -5,
+    backgroundColor: 'white',
+    color: 'black',
+    width: 10,
+    height: 10,
+    borderRadius: 5,
+    fontSize: 8,
+    textAlign: 'center',
+  },
+  playerPosition: {
+    color: 'white',
+    fontSize: 8,
+    fontWeight: 'bold',
+  },
+  scrollIndicator: {
+    alignItems: 'center',
+    marginTop: 5,
+  },
+  scrollIndicatorText: {
+    fontSize: 12,
+    color: '#666',
+  },
+  
+  // Control panel styles
+  controlPanel: {
+    backgroundColor: '#e0e0e0',
+    borderRadius: 5,
+    padding: 10,
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 10,
+  },
+  scoreDisplay: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  homeScore: {
+    fontSize: 24,
+    fontWeight: 'bold',
+  },
+  scoreDivider: {
+    fontSize: 24,
+    marginHorizontal: 5,
+  },
+  awayScore: {
+    fontSize: 24,
+    fontWeight: 'bold',
+  },
+  matchInfo: {
+    alignItems: 'center',
+  },
+  matchTime: {
+    fontSize: 16,
+    fontWeight: 'bold',
+  },
+  turnCount: {
+    fontSize: 12,
+  },
+  actionButtons: {
+    flexDirection: 'row',
+  },
+  actionButton: {
+    backgroundColor: '#2196F3',
+    paddingVertical: 8,
+    paddingHorizontal: 12,
+    borderRadius: 4,
+    marginLeft: 5,
+  },
+  disabledButton: {
+    backgroundColor: '#BDBDBD',
+  },
+  endTurnButton: {
+    backgroundColor: '#FF5722',
+  },
+  buttonText: {
+    color: 'white',
+    fontWeight: 'bold',
+    fontSize: 12,
+  },
+  selectPrompt: {
+    fontSize: 12,
+    color: '#666',
+  },
+  
+  // Player selection styles
+  playerSelectionContainer: {
+    marginBottom: 10,
+  },
+  sectionTitle: {
+    fontSize: 16,
+    fontWeight: 'bold',
+    marginBottom: 5,
+  },
+  playerCards: {
+    flexDirection: 'row',
+  },
+  playerCardWrapper: {
+    marginRight: 10,
+    position: 'relative',
+  },
+  playerCard: {
+    width: 70,
+    height: 100,
+    backgroundColor: '#f5f5f5',
+    borderRadius: 5,
+    borderWidth: 1,
+    borderColor: '#ccc',
+    overflow: 'hidden',
+  },
+  selectedPlayerCard: {
+    borderWidth: 2,
+    borderColor: '#FFC107',
+  },
+  yellowCardPlayer: {
+    borderLeftWidth: 3,
+    borderLeftColor: '#FFC107',
+  },
+  redCardPlayer: {
+    borderLeftWidth: 3,
+    borderLeftColor: '#F44336',
+  },
+  cardHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    padding: 3,
+    backgroundColor: '#2196F3',
+  },
+  playerPosition: {
+    color: 'white',
+    fontSize: 10,
+    fontWeight: 'bold',
+  },
+  playerNumber: {
+    color: 'white',
+    fontSize: 10,
+  },
+  playerPhoto: {
+    height: 50,
+    backgroundColor: '#e0e0e0',
+    position: 'relative',
+  },
+  playerPhotoImage: {
+    width: '100%',
+    height: '100%',
+  },
+  playerPhotoPlaceholder: {
+    width: '100%',
+    height: '100%',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  playerInitial: {
+    fontSize: 24,
+    color: '#757575',
+  },
+      injuryIndicator: {
+    position: 'absolute',
+    top: 2,
+    right: 2,
+    width: 12,
+    height: 12,
+    borderRadius: 6,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  minorInjury: {
+    backgroundColor: '#FFC107',
+  },
+  seriousInjury: {
+    backgroundColor: '#FF9800',
+  },
+  majorInjury: {
+    backgroundColor: '#F44336',
+  },
+  injuryText: {
+    color: 'white',
+    fontSize: 8,
+    fontWeight: 'bold',
+  },
+  cardFooter: {
+    padding: 3,
+    alignItems: 'center',
+  },
+  playerName: {
+    fontSize: 10,
+    fontWeight: 'bold',
+  },
+  movementPattern: {
+    fontSize: 8,
+    color: '#666',
+  },
+  addPhotoButton: {
+    position: 'absolute',
+    bottom: -8,
+    right: -8,
+    width: 24,
+    height: 24,
+    borderRadius: 12,
+    backgroundColor: '#2196F3',
+    justifyContent: 'center',
+    alignItems: 'center',
+    borderWidth: 1,
+    borderColor: 'white',
+  },
+  addPhotoText: {
+    color: 'white',
+    fontSize: 12,
+  },
+  
+  // Game log styles
+  gameLog: {
+    backgroundColor: '#e0e0e0',
+    borderRadius: 5,
+    padding: 5,
+    maxHeight: 100,
+  },
+  gameLogTitle: {
+    fontSize: 14,
+    fontWeight: 'bold',
+    marginBottom: 5,
+  },
+  logEntries: {
+    maxHeight: 70,
+  },
+  logEntry: {
+    flexDirection: 'row',
+    padding: 5,
+    borderRadius: 3,
+    marginBottom: 3,
+  },
+  foulEntry: {
+    backgroundColor: '#FFEBEE',
+  },
+  injuryEntry: {
+    backgroundColor: '#FFF8E1',
+  },
+  logTime: {
+    fontWeight: 'bold',
+    marginRight: 5,
+    width: 30,
+  },
+  logContent: {
+    flex: 1,
+    fontSize: 12,
+  },
+  
+  // Camera styles
+  cameraContainer: {
+    flex: 1,
+    position: 'relative',
+  },
+  camera: {
+    flex: 1,
+  },
+  cameraControls: {
+    position: 'absolute',
+    bottom: 20,
+    left: 0,
+    right: 0,
+    flexDirection: 'row',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  captureButton: {
+    width: 70,
+    height: 70,
+    borderRadius: 35,
+    backgroundColor: 'rgba(255, 255, 255, 0.3)',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  captureButtonInner: {
+    width: 60,
+    height: 60,
+    borderRadius: 30,
+    backgroundColor: 'white',
+  },
+  cancelButton: {
+    position: 'absolute',
+    left: 20,
+    padding: 10,
+    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+    borderRadius: 5,
+  },
+  cancelButtonText: {
+    color: 'white',
+    fontWeight: 'bold',
+  },
+  
+  // Overlay styles
+  overlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.7)',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  overlayContent: {
+    backgroundColor: 'white',
+    padding: 20,
+    borderRadius: 10,
+    alignItems: 'center',
+    width: '80%',
+  },
+  overlayTitle: {
+    fontSize: 24,
+    fontWeight: 'bold',
+    marginBottom: 15,
+  },
+  overlayScore: {
+    fontSize: 36,
+    fontWeight: 'bold',
+    marginBottom: 15,
+  },
+  overlayWinner: {
+    fontSize: 18,
+    marginBottom: 20,
+  },
+  overlayButton: {
+    backgroundColor: '#4CAF50',
+    paddingVertical: 10,
+    paddingHorizontal: 20,
+    borderRadius: 5,
+  },
+  overlayButtonText: {
+    color: 'white',
+    fontSize: 16,
+    fontWeight: 'bold',
+  },
+});
+
+// Helper function to generate possible moves
+const generatePossibleMoves = (player, allPlayers) => {
+  const { col, row, movementPattern } = player;
+  const possibleMoves = [];
+  
+  // Apply movement reduction from injuries
+  const moveReduction = player.movementReduction || 0;
+  
+  // Generate moves based on chess piece pattern
+  switch (movementPattern) {
+    case 'king': // Goalkeeper
+      // Same logic as web implementation
+      for (let dCol = -1; dCol <= 1; dCol++) {
+        for (let dRow = -1; dRow <= 1; dRow++) {
+          if (dCol === 0 && dRow === 0) continue;
+          
+          const newCol = col + dCol;
+          const newRow = row + dRow;
+          
+          if (isInBounds(newCol, newRow)) {
+            possibleMoves.push({ col: newCol, row: newRow });
+          }
+        }
+      }
+      
+      // Special goalkeeper diving move
+      if (player.position === 'GK') {
+        const ballOwner = allPlayers.find(p => p.hasBall);
+        if (ballOwner && isInShootingRange(ballOwner)) {
+          if (isInBounds(col, row - 2)) possibleMoves.push({ col, row: row - 2 });
+          if (isInBounds(col, row + 2)) possibleMoves.push({ col, row: row + 2 });
+        }
+      }
+      break;
+      
+    case 'rook': // Defenders and Strikers
+      // Same logic as web implementation
+      const rookRange = player.position.includes('B') ? 3 : 4;
+      const adjustedRookRange = Math.max(1, rookRange - moveReduction);
+      
+      for (let dir = 0; dir < 4; dir++) {
+        const dCol = dir === 0 ? 1 : dir === 1 ? -1 : 0;
+        const dRow = dir === 2 ? 1 : dir === 3 ? -1 : 0;
+        
+        for (let i = 1; i <= adjustedRookRange; i++) {
+          const newCol = col + (dCol * i);
+          const newRow = row + (dRow * i);
+          
+          if (isInBounds(newCol, newRow)) {
+            possibleMoves.push({ col: newCol, row: newRow });
+          } else {
+            break;
+          }
+        }
+      }
+      
+      // Striker special move
+      if (player.position === 'ST') {
+        for (let dCol = -1; dCol <= 1; dCol += 2) {
+          for (let dRow = -1; dRow <= 1; dRow += 2) {
+            const newCol = col + dCol;
+            const newRow = row + dRow;
+            
+            if (isInBounds(newCol, newRow)) {
+              possibleMoves.push({ col: newCol, row: newRow });
+            }
+          }
+        }
+      }
+      break;
+      
+    // Other cases (bishop, knight, queen) follow same pattern as web implementation
+    case 'bishop':
+      // Full backs logic
+      break;
+      
+    case 'knight':
+      // Wingers and DMs logic
+      break;
+      
+    case 'queen':
+      // Midfielders logic
+      break;
+  }
+  
+  return possibleMoves;
+};
+
+// Helper function to check if a position is within bounds
+const isInBounds = (col, row) => {
+  return col >= 0 && col < 20 && row >= 0 && row < 10;
+};
+
+// Helper function to check if a player is in shooting range
+const isInShootingRange = (player) => {
+  // Same logic as web implementation
+  if (player.team === 'home') {
+    return player.col >= 16;
+  } else {
+    return player.col <= 3;
+  }
+};
+
+export default FootballChessGame;
+    // FootballChess Mobile Implementation using React Native
+import React, { useState, useEffect } from 'react';
+import {
+  SafeAreaView,
+  View,
+  Text,
+  TouchableOpacity,
+  Image,
+  StyleSheet,
+  Alert,
+  ScrollView,
+  Dimensions,
+  Modal
+} from 'react-native';
+import { Camera } from 

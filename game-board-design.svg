@@ -1,0 +1,118 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 800 500">
+  <!-- Field Background -->
+  <rect width="800" height="500" fill="#4CAF50" />
+  
+  <!-- Grid Lines -->
+  <g stroke="#FFFFFF" stroke-width="2" opacity="0.7">
+    <!-- Vertical section dividers -->
+    <line x1="200" y1="0" x2="200" y2="500" />
+    <line x1="400" y1="0" x2="400" y2="500" />
+    <line x1="600" y1="0" x2="600" y2="500" />
+    
+    <!-- Horizontal grid lines - 10 rows -->
+    <line x1="0" y1="50" x2="800" y2="50" />
+    <line x1="0" y1="100" x2="800" y2="100" />
+    <line x1="0" y1="150" x2="800" y2="150" />
+    <line x1="0" y1="200" x2="800" y2="200" />
+    <line x1="0" y1="250" x2="800" y2="250" />
+    <line x1="0" y1="300" x2="800" y2="300" />
+    <line x1="0" y1="350" x2="800" y2="350" />
+    <line x1="0" y1="400" x2="800" y2="400" />
+    <line x1="0" y1="450" x2="800" y2="450" />
+    
+    <!-- Vertical grid lines - inside each section (5 columns per section) -->
+    <line x1="40" y1="0" x2="40" y2="500" />
+    <line x1="80" y1="0" x2="80" y2="500" />
+    <line x1="120" y1="0" x2="120" y2="500" />
+    <line x1="160" y1="0" x2="160" y2="500" />
+    
+    <line x1="240" y1="0" x2="240" y2="500" />
+    <line x1="280" y1="0" x2="280" y2="500" />
+    <line x1="320" y1="0" x2="320" y2="500" />
+    <line x1="360" y1="0" x2="360" y2="500" />
+    
+    <line x1="440" y1="0" x2="440" y2="500" />
+    <line x1="480" y1="0" x2="480" y2="500" />
+    <line x1="520" y1="0" x2="520" y2="500" />
+    <line x1="560" y1="0" x2="560" y2="500" />
+    
+    <line x1="640" y1="0" x2="640" y2="500" />
+    <line x1="680" y1="0" x2="680" y2="500" />
+    <line x1="720" y1="0" x2="720" y2="500" />
+    <line x1="760" y1="0" x2="760" y2="500" />
+  </g>
+  
+  <!-- Center Circle -->
+  <circle cx="400" cy="250" r="70" fill="none" stroke="#FFFFFF" stroke-width="2" opacity="0.8" />
+  <circle cx="400" cy="250" r="5" fill="#FFFFFF" opacity="0.8" />
+  
+  <!-- Goal Areas -->
+  <!-- Left Goal (3 squares) -->
+  <rect x="0" y="200" width="40" height="50" fill="#9C27B0" opacity="0.3" />
+  <rect x="0" y="250" width="40" height="50" fill="#9C27B0" opacity="0.3" />
+  <rect x="0" y="300" width="40" height="50" fill="#9C27B0" opacity="0.3" />
+  
+  <!-- Right Goal (3 squares) -->
+  <rect x="760" y="200" width="40" height="50" fill="#9C27B0" opacity="0.3" />
+  <rect x="760" y="250" width="40" height="50" fill="#9C27B0" opacity="0.3" />
+  <rect x="760" y="300" width="40" height="50" fill="#9C27B0" opacity="0.3" />
+  
+  <!-- Penalty Areas -->
+  <rect x="0" y="150" width="120" height="200" fill="none" stroke="#FFFFFF" stroke-width="2" opacity="0.6" />
+  <rect x="680" y="150" width="120" height="200" fill="none" stroke="#FFFFFF" stroke-width="2" opacity="0.6" />
+  
+  <!-- Sample Player Cards -->
+  <!-- Goalkeeper (Team 1) -->
+  <g transform="translate(20, 250)">
+    <rect width="30" height="40" rx="3" fill="#FF5722" stroke="#000000" stroke-width="1" />
+    <text x="15" y="25" font-family="Arial" font-size="12" text-anchor="middle" fill="white">GK</text>
+  </g>
+  
+  <!-- Striker (Team 2) -->
+  <g transform="translate(750, 250)">
+    <rect width="30" height="40" rx="3" fill="#2196F3" stroke="#000000" stroke-width="1" />
+    <text x="15" y="25" font-family="Arial" font-size="12" text-anchor="middle" fill="white">ST</text>
+  </g>
+  
+  <!-- Sample Midfielder (Team 1) with movement pattern visualization -->
+  <g transform="translate(280, 300)">
+    <rect width="30" height="40" rx="3" fill="#FF5722" stroke="#000000" stroke-width="1" />
+    <text x="15" y="25" font-family="Arial" font-size="12" text-anchor="middle" fill="white">CM</text>
+    <!-- Movement pattern indicators (Queen-like movement, limited to 2 squares) -->
+    <circle cx="15" cy="-10" r="3" fill="#FFEB3B" opacity="0.7" />
+    <circle cx="55" cy="-10" r="3" fill="#FFEB3B" opacity="0.7" />
+    <circle cx="-25" cy="-10" r="3" fill="#FFEB3B" opacity="0.7" />
+    <circle cx="15" cy="60" r="3" fill="#FFEB3B" opacity="0.7" />
+    <circle cx="55" cy="60" r="3" fill="#FFEB3B" opacity="0.7" />
+    <circle cx="-25" cy="60" r="3" fill="#FFEB3B" opacity="0.7" />
+    <circle cx="-25" cy="25" r="3" fill="#FFEB3B" opacity="0.7" />
+    <circle cx="55" cy="25" r="3" fill="#FFEB3B" opacity="0.7" />
+  </g>
+  
+  <!-- Sample Winger (Team 2) with movement pattern visualization -->
+  <g transform="translate(520, 200)">
+    <rect width="30" height="40" rx="3" fill="#2196F3" stroke="#000000" stroke-width="1" />
+    <text x="15" y="25" font-family="Arial" font-size="12" text-anchor="middle" fill="white">RW</text>
+    <!-- Movement pattern indicators (Knight-like plus horizontal) -->
+    <circle cx="-25" cy="-50" r="3" fill="#FFEB3B" opacity="0.7" />
+    <circle cx="55" cy="-50" r="3" fill="#FFEB3B" opacity="0.7" />
+    <circle cx="-50" cy="-10" r="3" fill="#FFEB3B" opacity="0.7" />
+    <circle cx="80" cy="-10" r="3" fill="#FFEB3B" opacity="0.7" />
+    <circle cx="-50" cy="60" r="3" fill="#FFEB3B" opacity="0.7" />
+    <circle cx="80" cy="60" r="3" fill="#FFEB3B" opacity="0.7" />
+    <circle cx="-25" cy="100" r="3" fill="#FFEB3B" opacity="0.7" />
+    <circle cx="55" cy="100" r="3" fill="#FFEB3B" opacity="0.7" />
+    <circle cx="-25" cy="25" r="3" fill="#FFEB3B" opacity="0.7" />
+    <circle cx="55" cy="25" r="3" fill="#FFEB3B" opacity="0.7" />
+  </g>
+  
+  <!-- Football (Ball) -->
+  <circle cx="400" cy="250" r="8" fill="white" stroke="black" stroke-width="1" />
+  <path d="M400,242 L400,258 M392,250 L408,250" stroke="black" stroke-width="1" />
+  
+  <!-- Section Labels -->
+  <text x="100" y="20" font-family="Arial" font-size="14" fill="white" text-anchor="middle">Defensive Zone</text>
+  <text x="300" y="20" font-family="Arial" font-size="14" fill="white" text-anchor="middle">Midfield (Def)</text>
+  <text x="500" y="20" font-family="Arial" font-size="14" fill="white" text-anchor="middle">Midfield (Att)</text>
+  <text x="700" y="20" font-family="Arial" font-size="14" fill="white" text-anchor="middle">Attacking Zone</text>
+</svg>

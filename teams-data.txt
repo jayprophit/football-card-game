@@ -1,0 +1,258 @@
+// Sample teams data for FootballChess
+// This file provides pre-configured teams with players
+
+const teams = {
+  // England
+  england: {
+    name: "England",
+    shortName: "ENG",
+    color1: "#FFFFFF",
+    color2: "#FF0000",
+    players: [
+      { id: "eng1", name: "Pickford", position: "GK", number: 1, movementPattern: "king" },
+      { id: "eng2", name: "Walker", position: "RB", number: 2, movementPattern: "bishop" },
+      { id: "eng3", name: "Stones", position: "CB", number: 5, movementPattern: "rook" },
+      { id: "eng4", name: "Maguire", position: "CB", number: 6, movementPattern: "rook" },
+      { id: "eng5", name: "Shaw", position: "LB", number: 3, movementPattern: "bishop" },
+      { id: "eng6", name: "Rice", position: "CDM", number: 4, movementPattern: "knight" },
+      { id: "eng7", name: "Henderson", position: "CM", number: 8, movementPattern: "queen" },
+      { id: "eng8", name: "Bellingham", position: "CAM", number: 10, movementPattern: "queen" },
+      { id: "eng9", name: "Saka", position: "RW", number: 7, movementPattern: "knight" },
+      { id: "eng10", name: "Kane", position: "ST", number: 9, movementPattern: "rook" },
+      { id: "eng11", name: "Foden", position: "LW", number: 11, movementPattern: "knight" }
+    ]
+  },
+  
+  // Brazil
+  brazil: {
+    name: "Brazil",
+    shortName: "BRA",
+    color1: "#FFF200",
+    color2: "#009C3B",
+    players: [
+      { id: "bra1", name: "Alisson", position: "GK", number: 1, movementPattern: "king" },
+      { id: "bra2", name: "Danilo", position: "RB", number: 2, movementPattern: "bishop" },
+      { id: "bra3", name: "Marquinhos", position: "CB", number: 4, movementPattern: "rook" },
+      { id: "bra4", name: "Silva", position: "CB", number: 3, movementPattern: "rook" },
+      { id: "bra5", name: "Telles", position: "LB", number: 6, movementPattern: "bishop" },
+      { id: "bra6", name: "Casemiro", position: "CDM", number: 5, movementPattern: "knight" },
+      { id: "bra7", name: "Paqueta", position: "CM", number: 8, movementPattern: "queen" },
+      { id: "bra8", name: "Neymar", position: "CAM", number: 10, movementPattern: "queen" },
+      { id: "bra9", name: "Raphinha", position: "RW", number: 7, movementPattern: "knight" },
+      { id: "bra10", name: "Richarlison", position: "ST", number: 9, movementPattern: "rook" },
+      { id: "bra11", name: "Vinicius Jr", position: "LW", number: 11, movementPattern: "knight" }
+    ]
+  },
+  
+  // Manchester City
+  manchesterCity: {
+    name: "Manchester City",
+    shortName: "MCI",
+    color1: "#6CABDD",
+    color2: "#1C2C5B",
+    players: [
+      { id: "mci1", name: "Ederson", position: "GK", number: 31, movementPattern: "king" },
+      { id: "mci2", name: "Walker", position: "RB", number: 2, movementPattern: "bishop" },
+      { id: "mci3", name: "Dias", position: "CB", number: 3, movementPattern: "rook" },
+      { id: "mci4", name: "Stones", position: "CB", number: 5, movementPattern: "rook" },
+      { id: "mci5", name: "Cancelo", position: "LB", number: 7, movementPattern: "bishop" },
+      { id: "mci6", name: "Rodri", position: "CDM", number: 16, movementPattern: "knight" },
+      { id: "mci7", name: "De Bruyne", position: "CM", number: 17, movementPattern: "queen" },
+      { id: "mci8", name: "Silva", position: "CAM", number: 20, movementPattern: "queen" },
+      { id: "mci9", name: "Foden", position: "RW", number: 47, movementPattern: "knight" },
+      { id: "mci10", name: "Haaland", position: "ST", number: 9, movementPattern: "rook" },
+      { id: "mci11", name: "Grealish", position: "LW", number: 10, movementPattern: "knight" }
+    ]
+  },
+  
+  // Real Madrid
+  realMadrid: {
+    name: "Real Madrid",
+    shortName: "RMA",
+    color1: "#FFFFFF",
+    color2: "#000000",
+    players: [
+      { id: "rma1", name: "Courtois", position: "GK", number: 1, movementPattern: "king" },
+      { id: "rma2", name: "Carvajal", position: "RB", number: 2, movementPattern: "bishop" },
+      { id: "rma3", name: "Militao", position: "CB", number: 3, movementPattern: "rook" },
+      { id: "rma4", name: "Alaba", position: "CB", number: 4, movementPattern: "rook" },
+      { id: "rma5", name: "Mendy", position: "LB", number: 23, movementPattern: "bishop" },
+      { id: "rma6", name: "Tchouaméni", position: "CDM", number: 18, movementPattern: "knight" },
+      { id: "rma7", name: "Modric", position: "CM", number: 10, movementPattern: "queen" },
+      { id: "rma8", name: "Kroos", position: "CM", number: 8, movementPattern: "queen" },
+      { id: "rma9", name: "Valverde", position: "RW", number: 15, movementPattern: "knight" },
+      { id: "rma10", name: "Benzema", position: "ST", number: 9, movementPattern: "rook" },
+      { id: "rma11", name: "Vinicius Jr", position: "LW", number: 7, movementPattern: "knight" }
+    ]
+  },
+  
+  // Barcelona
+  barcelona: {
+    name: "Barcelona",
+    shortName: "FCB",
+    color1: "#A50044",
+    color2: "#004D98",
+    players: [
+      { id: "fcb1", name: "ter Stegen", position: "GK", number: 1, movementPattern: "king" },
+      { id: "fcb2", name: "Dest", position: "RB", number: 2, movementPattern: "bishop" },
+      { id: "fcb3", name: "Araujo", position: "CB", number: 4, movementPattern: "rook" },
+      { id: "fcb4", name: "Pique", position: "CB", number: 3, movementPattern: "rook" },
+      { id: "fcb5", name: "Alba", position: "LB", number: 18, movementPattern: "bishop" },
+      { id: "fcb6", name: "Busquets", position: "CDM", number: 5, movementPattern: "knight" },
+      { id: "fcb7", name: "Pedri", position: "CM", number: 8, movementPattern: "queen" },
+      { id: "fcb8", name: "de Jong", position: "CM", number: 21, movementPattern: "queen" },
+      { id: "fcb9", name: "Dembele", position: "RW", number: 7, movementPattern: "knight" },
+      { id: "fcb10", name: "Lewandowski", position: "ST", number: 9, movementPattern: "rook" },
+      { id: "fcb11", name: "Ansu Fati", position: "LW", number: 10, movementPattern: "knight" }
+    ]
+  },
+  
+  // France
+  france: {
+    name: "France",
+    shortName: "FRA",
+    color1: "#002395",
+    color2: "#FFFFFF",
+    players: [
+      { id: "fra1", name: "Lloris", position: "GK", number: 1, movementPattern: "king" },
+      { id: "fra2", name: "Pavard", position: "RB", number: 2, movementPattern: "bishop" },
+      { id: "fra3", name: "Varane", position: "CB", number: 4, movementPattern: "rook" },
+      { id: "fra4", name: "Upamecano", position: "CB", number: 18, movementPattern: "rook" },
+      { id: "fra5", name: "Hernandez", position: "LB", number: 21, movementPattern: "bishop" },
+      { id: "fra6", name: "Tchouaméni", position: "CDM", number: 8, movementPattern: "knight" },
+      { id: "fra7", name: "Rabiot", position: "CM", number: 14, movementPattern: "queen" },
+      { id: "fra8", name: "Griezmann", position: "CAM", number: 7, movementPattern: "queen" },
+      { id: "fra9", name: "Dembele", position: "RW", number: 11, movementPattern: "knight" },
+      { id: "fra10", name: "Benzema", position: "ST", number: 19, movementPattern: "rook" },
+      { id: "fra11", name: "Mbappe", position: "LW", number: 10, movementPattern: "knight" }
+    ]
+  },
+  
+  // Argentina
+  argentina: {
+    name: "Argentina",
+    shortName: "ARG",
+    color1: "#75AADB",
+    color2: "#FFFFFF",
+    players: [
+      { id: "arg1", name: "E. Martinez", position: "GK", number: 23, movementPattern: "king" },
+      { id: "arg2", name: "Molina", position: "RB", number: 26, movementPattern: "bishop" },
+      { id: "arg3", name: "Romero", position: "CB", number: 13, movementPattern: "rook" },
+      { id: "arg4", name: "Otamendi", position: "CB", number: 19, movementPattern: "rook" },
+      { id: "arg5", name: "Acuna", position: "LB", number: 8, movementPattern: "bishop" },
+      { id: "arg6", name: "De Paul", position: "CDM", number: 7, movementPattern: "knight" },
+      { id: "arg7", name: "Paredes", position: "CM", number: 5, movementPattern: "queen" },
+      { id: "arg8", name: "Mac Allister", position: "CM", number: 20, movementPattern: "queen" },
+      { id: "arg9", name: "Di Maria", position: "RW", number: 11, movementPattern: "knight" },
+      { id: "arg10", name: "L. Martinez", position: "ST", number: 22, movementPattern: "rook" },
+      { id: "arg11", name: "Messi", position: "LW", number: 10, movementPattern: "knight" }
+    ]
+  },
+  
+  // Generic home team (for custom teams)
+  homeTeam: {
+    name: "Home Team",
+    shortName: "HOME",
+    color1: "#FF0000",
+    color2: "#FFFFFF",
+    players: [
+      { id: "h1", name: "Goalkeeper", position: "GK", number: 1, movementPattern: "king" },
+      { id: "h2", name: "Right Back", position: "RB", number: 2, movementPattern: "bishop" },
+      { id: "h3", name: "Center Back 1", position: "CB", number: 4, movementPattern: "rook" },
+      { id: "h4", name: "Center Back 2", position: "CB", number: 5, movementPattern: "rook" },
+      { id: "h5", name: "Left Back", position: "LB", number: 3, movementPattern: "bishop" },
+      { id: "h6", name: "Def. Mid", position: "CDM", number: 6, movementPattern: "knight" },
+      { id: "h7", name: "Center Mid 1", position: "CM", number: 8, movementPattern: "queen" },
+      { id: "h8", name: "Center Mid 2", position: "CM", number: 10, movementPattern: "queen" },
+      { id: "h9", name: "Right Wing", position: "RW", number: 7, movementPattern: "knight" },
+      { id: "h10", name: "Striker", position: "ST", number: 9, movementPattern: "rook" },
+      { id: "h11", name: "Left Wing", position: "LW", number: 11, movementPattern: "knight" }
+    ]
+  },
+  
+  // Generic away team (for custom teams)
+  awayTeam: {
+    name: "Away Team",
+    shortName: "AWAY",
+    color1: "#0000FF",
+    color2: "#FFFFFF",
+    players: [
+      { id: "a1", name: "Goalkeeper", position: "GK", number: 1, movementPattern: "king" },
+      { id: "a2", name: "Right Back", position: "RB", number: 2, movementPattern: "bishop" },
+      { id: "a3", name: "Center Back 1", position: "CB", number: 4, movementPattern: "rook" },
+      { id: "a4", name: "Center Back 2", position: "CB", number: 5, movementPattern: "rook" },
+      { id: "a5", name: "Left Back", position: "LB", number: 3, movementPattern: "bishop" },
+      { id: "a6", name: "Def. Mid", position: "CDM", number: 6, movementPattern: "knight" },
+      { id: "a7", name: "Center Mid 1", position: "CM", number: 8, movementPattern: "queen" },
+      { id: "a8", name: "Center Mid 2", position: "CM", number: 10, movementPattern: "queen" },
+      { id: "a9", name: "Right Wing", position: "RW", number: 7, movementPattern: "knight" },
+      { id: "a10", name: "Striker", position: "ST", number: 9, movementPattern: "rook" },
+      { id: "a11", name: "Left Wing", position: "LW", number: 11, movementPattern: "knight" }
+    ]
+  }
+};
+
+// Helper functions for teams
+const getTeam = (teamId) => {
+  if (!teams[teamId]) {
+    console.error(`Team ${teamId} not found!`);
+    return teams.homeTeam; // Default to generic home team
+  }
+  return teams[teamId];
+};
+
+const getAllTeams = () => {
+  return Object.keys(teams).map(key => ({
+    id: key,
+    name: teams[key].name,
+    shortName: teams[key].shortName
+  }));
+};
+
+const getPlayerPositionMap = () => {
+  return {
+    "GK": { name: "Goalkeeper", movementPattern: "king", description: "Moves one square in any direction. Can dive two squares laterally when ball is in shooting range." },
+    "CB": { name: "Center Back", movementPattern: "rook", description: "Moves up to 3 squares horizontally or vertically." },
+    "LB": { name: "Left Back", movementPattern: "bishop", description: "Moves up to 3 squares diagonally. Can also move 1 square horizontally." },
+    "RB": { name: "Right Back", movementPattern: "bishop", description: "Moves up to 3 squares diagonally. Can also move 1 square horizontally." },
+    "CDM": { name: "Defensive Midfielder", movementPattern: "knight", description: "Moves in L-shape (like chess knight). Can also move 1 square in any direction." },
+    "CM": { name: "Central Midfielder", movementPattern: "queen", description: "Moves up to 2 squares in any direction." },
+    "CAM": { name: "Attacking Midfielder", movementPattern: "queen", description: "Moves up to 3 squares in any direction." },
+    "LW": { name: "Left Winger", movementPattern: "knight", description: "Moves in L-shape (like chess knight). Can also move 2 squares horizontally." },
+    "RW": { name: "Right Winger", movementPattern: "knight", description: "Moves in L-shape (like chess knight). Can also move 2 squares horizontally." },
+    "ST": { name: "Striker", movementPattern: "rook", description: "Moves up to 4 squares horizontally or vertically. Can also move 1 square diagonally." }
+  };
+};
+
+const createCustomTeam = (teamData) => {
+  const positions = ["GK", "RB", "CB", "CB", "LB", "CDM", "CM", "CM", "RW", "ST", "LW"];
+  const positionMap = getPlayerPositionMap();
+  
+  // Validate team data
+  if (!teamData.name || !teamData.color1) {
+    throw new Error("Team name and primary color are required");
+  }
+  
+  // Generate players if not provided
+  const players = teamData.players || positions.map((pos, index) => {
+    const id = `custom${teamData.id || 'team'}${index + 1}`;
+    const name = positionMap[pos]?.name || pos;
+    const number = index + 1;
+    const movementPattern = positionMap[pos]?.movementPattern || "king";
+    
+    return { id, name, position: pos, number, movementPattern };
+  });
+  
+  // Create new team object
+  const customTeam = {
+    name: teamData.name,
+    shortName: teamData.shortName || teamData.name.substring(0, 3).toUpperCase(),
+    color1: teamData.color1,
+    color2: teamData.color2 || "#FFFFFF",
+    players
+  };
+  
+  return customTeam;
+};
+
+export { teams, getTeam, getAllTeams, getPlayerPositionMap, createCustomTeam };

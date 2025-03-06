@@ -1,0 +1,252 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1280 720">
+  <!-- Definitions -->
+  <defs>
+    <!-- Gradients and effects -->
+    <linearGradient id="backgroundGradient" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" stop-color="#0D47A1" />
+      <stop offset="100%" stop-color="#1A237E" />
+    </linearGradient>
+    
+    <linearGradient id="fieldGradient" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#43A047" />
+      <stop offset="100%" stop-color="#2E7D32" />
+    </linearGradient>
+    
+    <linearGradient id="cardGlow" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#64B5F6" stop-opacity="0.8" />
+      <stop offset="100%" stop-color="#1976D2" stop-opacity="0.4" />
+    </linearGradient>
+    
+    <linearGradient id="goldGradient" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#FFC107" />
+      <stop offset="100%" stop-color="#FFA000" />
+    </linearGradient>
+    
+    <linearGradient id="redCardGradient" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#F44336" />
+      <stop offset="100%" stop-color="#D32F2F" />
+    </linearGradient>
+    
+    <linearGradient id="blueCardGradient" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#2196F3" />
+      <stop offset="100%" stop-color="#1565C0" />
+    </linearGradient>
+    
+    <filter id="dropShadow" x="-20%" y="-20%" width="140%" height="140%">
+      <feGaussianBlur in="SourceAlpha" stdDeviation="5" />
+      <feOffset dx="0" dy="5" result="offsetblur" />
+      <feComponentTransfer>
+        <feFuncA type="linear" slope="0.5" />
+      </feComponentTransfer>
+      <feMerge>
+        <feMergeNode />
+        <feMergeNode in="SourceGraphic" />
+      </feMerge>
+    </filter>
+    
+    <filter id="glow" x="-20%" y="-20%" width="140%" height="140%">
+      <feGaussianBlur in="SourceAlpha" stdDeviation="10" />
+      <feComponentTransfer>
+        <feFuncA type="linear" slope="2" intercept="-0.5" />
+      </feComponentTransfer>
+      <feFlood flood-color="#64FFDA" result="color" />
+      <feComposite in="color" in2="SourceAlpha" operator="in" />
+      <feMerge>
+        <feMergeNode />
+        <feMergeNode in="SourceGraphic" />
+      </feMerge>
+    </filter>
+    
+    <pattern id="fieldTexture" patternUnits="userSpaceOnUse" width="50" height="50">
+      <rect width="50" height="50" fill="url(#fieldGradient)" />
+      <path d="M0,0 L50,50 M0,50 L50,0" stroke="#2E7D32" stroke-width="0.5" opacity="0.3" />
+    </pattern>
+  </defs>
+  
+  <!-- Background -->
+  <rect width="1280" height="720" fill="url(#backgroundGradient)" />
+  
+  <!-- Stylized Field Background -->
+  <rect x="50" y="150" width="1180" height="520" rx="20" fill="url(#fieldTexture)" />
+  <rect x="50" y="150" width="1180" height="520" rx="20" fill="url(#backgroundGradient)" opacity="0.3" />
+  
+  <!-- Field Lines -->
+  <rect x="100" y="200" width="1080" height="420" rx="0" fill="none" stroke="#FFFFFF" stroke-width="3" opacity="0.7" />
+  <circle cx="640" cy="410" r="70" fill="none" stroke="#FFFFFF" stroke-width="3" opacity="0.7" />
+  <line x1="640" y1="200" x2="640" y2="620" stroke="#FFFFFF" stroke-width="3" opacity="0.7" />
+  
+  <!-- App Logo -->
+  <g transform="translate(640, 90)">
+    <!-- Logo Background -->
+    <rect x="-200" y="-60" width="400" height="80" rx="40" fill="rgba(0,0,0,0.5)" filter="url(#dropShadow)" />
+    
+    <!-- Logo Text -->
+    <text x="0" y="0" font-family="Arial" font-size="48" font-weight="bold" text-anchor="middle" fill="white" filter="url(#glow)">FOOTBALL CHESS</text>
+    
+    <!-- Logo Icons -->
+    <rect x="-180" y="-35" width="30" height="30" rx="5" fill="white" opacity="0.9" />
+    <rect x="-140" y="-35" width="30" height="30" rx="5" fill="#1A237E" opacity="0.9" />
+    <circle cx="160" cy="-20" r="15" fill="#FFFFFF" opacity="0.9" />
+    <circle cx="160" cy="-20" r="7" fill="#000000" opacity="0.9" />
+  </g>
+  
+  <!-- Tagline -->
+  <text x="640" y="140" font-family="Arial" font-size="24" text-anchor="middle" fill="white" opacity="0.9">TACTICAL FOOTBALL CARD GAME</text>
+  
+  <!-- Featured Cards -->
+  <!-- Premium Player Card 1 -->
+  <g transform="translate(200, 350)" filter="url(#dropShadow)">
+    <!-- Card with perspective effect -->
+    <g transform="skewX(-10)">
+      <rect width="220" height="320" rx="10" fill="url(#blueCardGradient)" />
+      
+      <!-- Card Header -->
+      <rect width="220" height="50" rx="10 10 0 0" fill="rgba(0,0,0,0.3)" />
+      <text x="20" y="35" font-family="Arial" font-size="24" font-weight="bold" fill="white">DE BRUYNE</text>
+      
+      <!-- Position Badge -->
+      <circle cx="190" cy="25" r="18" fill="url(#goldGradient)" />
+      <text x="190" y="33" font-family="Arial" font-size="18" font-weight="bold" text-anchor="middle" fill="#000000">CM</text>
+      
+      <!-- Rating Badge -->
+      <circle cx="35" cy="80" r="25" fill="url(#goldGradient)" />
+      <text x="35" y="88" font-family="Arial" font-size="24" font-weight="bold" text-anchor="middle" fill="#000000">91</text>
+      
+      <!-- Player Silhouette -->
+      <rect x="20" y="60" width="180" height="160" rx="5" fill="#ccc" opacity="0.3" />
+      <path d="M110,80 Q170,120 160,210 L60,210 Q50,120 110,80" fill="#FFFFFF" opacity="0.2" />
+      <circle cx="110" cy="75" r="25" fill="#FFFFFF" opacity="0.2" />
+      
+      <!-- Stats -->
+      <rect x="20" y="230" width="180" height="80" rx="5" fill="rgba(255,255,255,0.1)" />
+      <text x="35" y="255" font-family="Arial" font-size="14" fill="white">Movement:</text>
+      <text x="185" y="255" font-family="Arial" font-size="14" text-anchor="end" fill="white">★★★★☆</text>
+      <text x="35" y="280" font-family="Arial" font-size="14" fill="white">Passing:</text>
+      <text x="185" y="280" font-family="Arial" font-size="14" text-anchor="end" fill="white">★★★★★</text>
+      <text x="35" y="305" font-family="Arial" font-size="14" fill="white">Special:</text>
+      <text x="185" y="305" font-family="Arial" font-size="14" text-anchor="end" fill="white">Playmaker</text>
+    </g>
+  </g>
+  
+  <!-- Premium Player Card 2 -->
+  <g transform="translate(640, 370)" filter="url(#dropShadow)">
+    <!-- Card with perspective effect -->
+    <g transform="scale(1.2)">
+      <rect width="220" height="320" rx="10" fill="url(#redCardGradient)" />
+      
+      <!-- Card Header -->
+      <rect width="220" height="50" rx="10 10 0 0" fill="rgba(0,0,0,0.3)" />
+      <text x="20" y="35" font-family="Arial" font-size="24" font-weight="bold" fill="white">HAALAND</text>
+      
+      <!-- Position Badge -->
+      <circle cx="190" cy="25" r="18" fill="url(#goldGradient)" />
+      <text x="190" y="33" font-family="Arial" font-size="18" font-weight="bold" text-anchor="middle" fill="#000000">ST</text>
+      
+      <!-- Rating Badge -->
+      <circle cx="35" cy="80" r="25" fill="url(#goldGradient)" />
+      <text x="35" y="88" font-family="Arial" font-size="24" font-weight="bold" text-anchor="middle" fill="#000000">93</text>
+      
+      <!-- Player Silhouette -->
+      <rect x="20" y="60" width="180" height="160" rx="5" fill="#ccc" opacity="0.3" />
+      <path d="M110,80 Q170,120 160,210 L60,210 Q50,120 110,80" fill="#FFFFFF" opacity="0.2" />
+      <circle cx="110" cy="75" r="25" fill="#FFFFFF" opacity="0.2" />
+      
+      <!-- Stats -->
+      <rect x="20" y="230" width="180" height="80" rx="5" fill="rgba(255,255,255,0.1)" />
+      <text x="35" y="255" font-family="Arial" font-size="14" fill="white">Movement:</text>
+      <text x="185" y="255" font-family="Arial" font-size="14" text-anchor="end" fill="white">★★★★☆</text>
+      <text x="35" y="280" font-family="Arial" font-size="14" fill="white">Shooting:</text>
+      <text x="185" y="280" font-family="Arial" font-size="14" text-anchor="end" fill="white">★★★★★</text>
+      <text x="35" y="305" font-family="Arial" font-size="14" fill="white">Special:</text>
+      <text x="185" y="305" font-family="Arial" font-size="14" text-anchor="end" fill="white">Finisher</text>
+    </g>
+    <!-- Highlight Glow -->
+    <rect width="264" height="384" x="-22" y="-32" rx="12" fill="none" stroke="#FFC107" stroke-width="3" opacity="0.7">
+      <animate attributeName="opacity" values="0.7;0.3;0.7" dur="2s" repeatCount="indefinite" />
+    </rect>
+  </g>
+  
+  <!-- Premium Player Card 3 -->
+  <g transform="translate(1000, 320)" filter="url(#dropShadow)">
+    <!-- Card with perspective effect -->
+    <g transform="skewX(10)">
+      <rect width="220" height="320" rx="10" fill="#8E24AA" />
+      
+      <!-- Card Header -->
+      <rect width="220" height="50" rx="10 10 0 0" fill="rgba(0,0,0,0.3)" />
+      <text x="20" y="35" font-family="Arial" font-size="24" font-weight="bold" fill="white">MESSI</text>
+      
+      <!-- Position Badge -->
+      <circle cx="190" cy="25" r="18" fill="url(#goldGradient)" />
+      <text x="190" y="33" font-family="Arial" font-size="18" font-weight="bold" text-anchor="middle" fill="#000000">RW</text>
+      
+      <!-- Rating Badge -->
+      <circle cx="35" cy="80" r="25" fill="url(#goldGradient)" />
+      <text x="35" y="88" font-family="Arial" font-size="24" font-weight="bold" text-anchor="middle" fill="#000000">92</text>
+      
+      <!-- Player Silhouette -->
+      <rect x="20" y="60" width="180" height="160" rx="5" fill="#ccc" opacity="0.3" />
+      <path d="M110,80 Q170,120 160,210 L60,210 Q50,120 110,80" fill="#FFFFFF" opacity="0.2" />
+      <circle cx="110" cy="75" r="25" fill="#FFFFFF" opacity="0.2" />
+      
+      <!-- Stats -->
+      <rect x="20" y="230" width="180" height="80" rx="5" fill="rgba(255,255,255,0.1)" />
+      <text x="35" y="255" font-family="Arial" font-size="14" fill="white">Movement:</text>
+      <text x="185" y="255" font-family="Arial" font-size="14" text-anchor="end" fill="white">★★★★★</text>
+      <text x="35" y="280" font-family="Arial" font-size="14" fill="white">Dribbling:</text>
+      <text x="185" y="280" font-family="Arial" font-size="14" text-anchor="end" fill="white">★★★★★</text>
+      <text x="35" y="305" font-family="Arial" font-size="14" fill="white">Special:</text>
+      <text x="185" y="305" font-family="Arial" font-size="14" text-anchor="end" fill="white">Magician</text>
+    </g>
+  </g>
+  
+  <!-- Game Board Elements -->
+  <!-- Example Player Token -->
+  <circle cx="450" cy="350" r="20" fill="#FF5722" stroke="white" stroke-width="2" />
+  <text x="450" y="355" font-family="Arial" font-size="12" text-anchor="middle" fill="white" font-weight="bold">CM</text>
+  
+  <!-- Example Player Token 2 -->
+  <circle cx="600" cy="410" r="20" fill="#2196F3" stroke="white" stroke-width="2" />
+  <text x="600" y="415" font-family="Arial" font-size="12" text-anchor="middle" fill="white" font-weight="bold">ST</text>
+  
+  <!-- Ball -->
+  <circle cx="525" cy="380" r="12" fill="white" stroke="#333" stroke-width="1" />
+  <path d="M525,380 m-6,0 a6,6 0 1,0 12,0 a6,6 0 1,0 -12,0" fill="black" opacity="0.7" />
+  
+  <!-- Movement Lines -->
+  <path d="M450,350 L525,380" stroke="#FFEB3B" stroke-width="2" stroke-dasharray="5,3" />
+  
+  <!-- Possible Move Highlights -->
+  <circle cx="525" cy="320" r="8" fill="#4CAF50" opacity="0.7" />
+  <circle cx="575" cy="350" r="8" fill="#4CAF50" opacity="0.7" />
+  <circle cx="500" cy="420" r="8" fill="#4CAF50" opacity="0.7" />
+  
+  <!-- Store Buttons -->
+  <g transform="translate(475, 650)">
+    <!-- App Store -->
+    <rect x="0" y="0" width="150" height="50" rx="25" fill="#FFFFFF" filter="url(#dropShadow)" />
+    <text x="75" y="30" font-family="Arial" font-size="18" font-weight="bold" text-anchor="middle" fill="#000000">App Store</text>
+    
+    <!-- Google Play -->
+    <rect x="180" y="0" width="150" height="50" rx="25" fill="#FFFFFF" filter="url(#dropShadow)" />
+    <text x="255" y="30" font-family="Arial" font-size="18" font-weight="bold" text-anchor="middle" fill="#000000">Google Play</text>
+  </g>
+  
+  <!-- Features List -->
+  <g transform="translate(300, 650)">
+    <text x="-200" y="-220" font-family="Arial" font-size="22" font-weight="bold" fill="white">FEATURES:</text>
+    <text x="-200" y="-180" font-family="Arial" font-size="18" fill="white">✓ Tactical Card Gameplay</text>
+    <text x="-200" y="-150" font-family="Arial" font-size="18" fill="white">✓ Create Custom Players</text>
+    <text x="-200" y="-120" font-family="Arial" font-size="18" fill="white">✓ Online Multiplayer</text>
+    <text x="-200" y="-90" font-family="Arial" font-size="18" fill="white">✓ Season & Tournament Modes</text>
+  </g>
+  
+  <!-- Ratings -->
+  <g transform="translate(950, 650)">
+    <text x="0" y="-220" font-family="Arial" font-size="22" font-weight="bold" text-anchor="end" fill="white">RATED 4.8/5</text>
+    <text x="0" y="-180" font-family="Arial" font-size="18" text-anchor="end" fill="white">★★★★★</text>
+    <text x="0" y="-150" font-family="Arial" font-size="18" text-anchor="end" fill="white">"Chess meets football brilliantly!"</text>
+    <text x="0" y="-120" font-family="Arial" font-size="18" text-anchor="end" fill="white">"Addictive strategic gameplay"</text>
+    <text x="0" y="-90" font-family="Arial" font-size="18" text-anchor="end" fill="white">"Best sports card game ever!"</text>
+  </g>
+</svg>

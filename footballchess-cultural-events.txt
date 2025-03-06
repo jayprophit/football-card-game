@@ -1,0 +1,1165 @@
+          // Mint NFT for rarest exclusive item
+          const rarityOrder = ["Common", "Uncommon", "Rare", "Epic", "Legendary"];
+          const items = [...event.rewards.exclusiveItems];
+          items.sort((a, b) => 
+            rarityOrder.indexOf(b.rarity) - rarityOrder.indexOf(a.rarity)
+          );
+          
+          if (items.length > 0) {
+            const rarestItem = items[0];
+            
+            const metadata = {
+              name: `${rarestItem.name} - ${event.name}`,
+              description: `Exclusive ${rarestItem.rarity} ${rarestItem.type} from the ${event.name} event.`,
+              image: `https://footballchess.com/events/${eventId}/${rarestItem.id}.png`,
+              attributes: [
+                { trait_type: "Event", value: event.name },
+                { trait_type: "Type", value: rarestItem.type },
+                { trait_type: "Rarity", value: rarestItem.rarity },
+                { trait_type: "Year", value: new Date().getFullYear() }
+              ]
+            };
+            
+            await this.blockchainManager.mintBadgeNFT(
+              user.walletAddress,
+              `event_${eventId}_${rarestItem.id}`,
+              metadata
+            );
+          }
+        } catch (error) {
+          console.error("Failed to award blockchain tokens/NFT for event completion:", error);
+        }
+      } else if (user.age < 18) {
+        // For underage users, store rewards to be claimed later
+        user.pendingBlockchainRewards = user.pendingBlockchainRewards || [];
+        user.pendingBlockchainRewards.push({
+          amount: event.rewards.tokens,
+          reason: `Event Completion: ${event.name}`,
+          timestamp: new Date(),
+          nft: items.length > 0 ? {
+            name: `${items[0].name} - ${event.name}`,
+            description: `Exclusive ${items[0].rarity} ${items[0].type} from the ${event.name} event.`,
+            image: `https://footballchess.com/events/${eventId}/${items[0].id}.png`,
+            type: "event_exclusive"
+          } : null
+        });
+      }
+    }
+    
+    // Save user updates
+    this.userAccountSystem.updateUser(user);
+    
+    return {
+      claimed: true,
+      reward: challenge.reward,
+      allChallengesCompleted,
+      eventCompletionReward: allChallengesCompleted ? {
+        tokens: event.rewards.tokens,
+        exclusiveItems: event.rewards.exclusiveItems
+      } : null
+    };
+  }
+  
+  /**
+   * Subscribe user to event notifications
+   */
+  subscribeToEventNotifications(username, preferences = {}) {
+    const user = this.userAccountSystem.getUser(username);
+    if (!user) throw new Error("User not found");
+    
+    // Set notification preferences
+    user.notificationPreferences = {
+      events: {
+        startReminder: preferences.startReminder ?? true, // Notify day before event starts
+        dailyReminders: preferences.dailyReminders ?? false, // Daily reminders during event
+        endReminder: preferences.endReminder ?? true, // Remind when event is ending
+        newEventAnnouncements: preferences.newEventAnnouncements ?? true, // Announce new events
+        categories: preferences.categories ?? {
+          western: true,
+          asian: true,
+          islamic: true,
+          indian: true,
+          japanese: true,
+          global: true,
+          football: true
+        }
+      }
+    };
+    
+    // Save user updates
+    this.userAccountSystem.updateUser(user);
+    
+    // Register in global notification system
+    this.eventNotifications.set(username, Date.now());
+    
+    return {
+      subscribed: true,
+      preferences: user.notificationPreferences.events
+    };
+  }
+  
+  /**
+   * Check and create event-based notifications for all subscribed users
+   * This would be run daily via a scheduled job
+   */
+  async processEventNotifications() {
+    const today = new Date();
+    const tomorrow = new Date(today);
+    tomorrow.setDate(today.getDate() + 1);
+    
+    // Clear dates to compare just month and day
+    const clearTime = (date) => {
+      date.setHours(0, 0, 0, 0);
+      return date;
+    };
+    
+    clearTime(today);
+    clearTime(tomorrow);
+    
+    // Find events starting tomorrow or ending tomorrow
+    const eventsStartingTomorrow = Object.values(this.eventsCalendar)
+      .filter(event => event.startDate && clearTime(new Date(event.startDate)).getTime() === tomorrow.getTime());
+    
+    const eventsEndingTomorrow = Object.values(this.eventsCalendar)
+      .filter(event => event.endDate && clearTime(new Date(event.endDate)).getTime() === tomorrow.getTime());
+    
+    // Find current active events
+    const activeEvents = this.getActiveEvents();
+    
+    // Process notifications for all subscribed users
+    const notifications = [];
+    
+    for (const [username] of this.eventNotifications) {
+      const user = this.userAccountSystem.getUser(username);
+      if (!user || !user.notificationPreferences?.events) continue;
+      
+      const prefs = user.notificationPreferences.events;
+      
+      // Start reminders
+      if (prefs.startReminder) {
+        for (const event of eventsStartingTomorrow) {
+          if (prefs.categories[event.category]) {
+            notifications.push({
+              username,
+              type: 'event_starting',
+              eventId: event.id,
+              message: `🎮 ${event.name} starts tomorrow! Get ready for special rewards and challenges.`,
+              scheduledFor: new Date(today.getTime() + 12 * 60 * 60 * 1000) // Noon tomorrow
+            });
+          }
+        }
+      }
+      
+      // End reminders
+      if (prefs.endReminder) {
+        for (const event of eventsEndingTomorrow) {
+          if (prefs.categories[event.category]) {
+            notifications.push({
+              username,
+              type: 'event_ending',
+              eventId: event.id,
+              message: `⚠️ Last day! The ${event.name} ends tomorrow. Complete your challenges now!`,
+              scheduledFor: new Date(today.getTime() + 10 * 60 * 60 * 1000) // 10am tomorrow
+            });
+          }
+        }
+      }
+      
+      // Daily reminders for active events
+      if (prefs.dailyReminders) {
+        // Only send if user is participating but hasn't completed all challenges
+        const userEvents = user.events?.active || [];
+        
+        for (const event of activeEvents) {
+          if (userEvents.includes(event.id) && prefs.categories[event.category]) {
+            // Check if user has incomplete challenges
+            const challengeProgress = user.events?.challengeProgress?.[event.id] || {};
+            const hasIncompleteChallenge = Object.values(challengeProgress)
+              .some(c => !c.completed || !c.claimed);
+            
+            if (hasIncompleteChallenge) {
+              notifications.push({
+                username,
+                type: 'event_reminder',
+                eventId: event.id,
+                message: `🎯 Don't forget to progress in your ${event.name} challenges today!`,
+                scheduledFor: new Date(today.getTime() + 18 * 60 * 60 * 1000) // 6pm today
+              });
+            }
+          }
+        }
+      }
+    }
+    
+    // In a real system, these notifications would be sent through a notification service
+    // For now, we'll just return them
+    return notifications;
+  }
+  
+  /**
+   * Get user's event rewards history
+   */
+  getUserEventHistory(username) {
+    const user = this.userAccountSystem.getUser(username);
+    if (!user) throw new Error("User not found");
+    
+    if (!user.events) {
+      return {
+        participated: [],
+        active: [],
+        completed: [],
+        rewards: []
+      };
+    }
+    
+    // Map participated events with details
+    const participatedEvents = user.events.participated.map(eventId => {
+      const event = this.eventsCalendar[eventId] || 
+                    Object.values(this.eventsCalendar).find(e => e.id === eventId);
+      
+      if (!event) return { id: eventId, name: "Unknown Event" };
+      
+      return {
+        id: eventId,
+        name: event.name,
+        year: new Date(event.endDate).getFullYear(),
+        rewards: user.events.rewards
+          .filter(r => r.eventId === eventId)
+          .map(r => ({
+            challenge: r.challengeId,
+            tokens: r.tokens,
+            items: r.itemIds,
+            claimedAt: r.claimedAt
+          }))
+      };
+    });
+    
+    return {
+      participated: participatedEvents,
+      active: user.events.active,
+      completed: user.events.participated,
+      rewards: user.events.rewards
+    };
+  }
+  
+  /**
+   * Create a special community event (for admin use)
+   */
+  createCustomEvent(eventConfig) {
+    // Validate required fields
+    if (!eventConfig.id || !eventConfig.name || !eventConfig.startDate || !eventConfig.endDate) {
+      throw new Error("Missing required event configuration");
+    }
+    
+    // Create the event
+    const newEvent = {
+      id: eventConfig.id,
+      name: eventConfig.name,
+      description: eventConfig.description || `Special event: ${eventConfig.name}`,
+      startDate: new Date(eventConfig.startDate),
+      endDate: new Date(eventConfig.endDate),
+      category: eventConfig.category || "custom",
+      theme: eventConfig.theme || {
+        colors: ["#4b0082", "#00bfff", "#32cd32"], // Default custom theme
+        icon: "star",
+        background: "custom_stadium"
+      },
+      rewards: eventConfig.rewards || {
+        tokens: 50,
+        exclusiveItems: [
+          { id: `${eventConfig.id}_kit`, name: `${eventConfig.name} Kit`, type: "kit", rarity: "Rare" },
+          { id: `${eventConfig.id}_ball`, name: `${eventConfig.name} Ball`, type: "ball", rarity: "Uncommon" }
+        ],
+        challenges: [
+          { id: `${eventConfig.id}_play`, name: "Play 5 matches during the event", reward: 30 },
+          { id: `${eventConfig.id}_win`, name: "Win 3 matches during the event", reward: 40 }
+        ]
+      }
+    };
+    
+    // Add to calendar
+    this.eventsCalendar[eventConfig.id] = newEvent;
+    
+    return newEvent;
+  }
+}
+
+/**
+ * Regional & Cultural Customization System
+ */
+class CulturalCustomizationSystem {
+  constructor(userAccountSystem) {
+    this.userAccountSystem = userAccountSystem;
+    
+    // Regional themes
+    this.regionalThemes = {
+      europe: {
+        id: "europe",
+        name: "European Football",
+        stadiums: ["old_trafford", "camp_nou", "bernabeu", "allianz_arena"],
+        teams: ["manchester_united", "barcelona", "real_madrid", "bayern_munich"],
+        commentary: "european",
+        crowdChants: "european",
+        weatherPatterns: ["rain", "cloudy", "clear", "snow"]
+      },
+      southAmerica: {
+        id: "south_america",
+        name: "South American Football",
+        stadiums: ["maracana", "la_bombonera", "estadio_monumental", "mineirao"],
+        teams: ["flamengo", "boca_juniors", "river_plate", "palmeiras"],
+        commentary: "latin",
+        crowdChants: "passionate",
+        weatherPatterns: ["clear", "rain", "hot"]
+      },
+      asia: {
+        id: "asia",
+        name: "Asian Football",
+        stadiums: ["saitama_stadium", "seoul_world_cup", "guangzhou", "bukit_jalil"],
+        teams: ["urawa_red_diamonds", "jeonbuk_motors", "guangzhou_evergrande", "al_hilal"],
+        commentary: "asian",
+        crowdChants: "rhythmic",
+        weatherPatterns: ["clear", "rain", "smog", "humid"]
+      },
+      africa: {
+        id: "africa",
+        name: "African Football",
+        stadiums: ["cairo_international", "fnb_stadium", "stade_mohamed_v", "national_stadium_abuja"],
+        teams: ["al_ahly", "kaizer_chiefs", "esperance", "mamelodi_sundowns"],
+        commentary: "african",
+        crowdChants: "drums",
+        weatherPatterns: ["hot", "clear", "dust"]
+      },
+      middleEast: {
+        id: "middle_east",
+        name: "Middle Eastern Football",
+        stadiums: ["king_fahd", "khalifa_international", "rashid_stadium", "king_abdullah"],
+        teams: ["al_hilal", "al_ain", "persepolis", "al_ahli"],
+        commentary: "arabic",
+        crowdChants: "passionate",
+        weatherPatterns: ["hot", "clear", "sandstorm"]
+      },
+      northAmerica: {
+        id: "north_america",
+        name: "North American Soccer",
+        stadiums: ["mercedes_benz", "bmo_field", "azteca", "banc_of_california"],
+        teams: ["atlanta_united", "toronto_fc", "club_america", "lafc"],
+        commentary: "american",
+        crowdChants: "organized",
+        weatherPatterns: ["clear", "rain", "snow", "cloudy"]
+      }
+    };
+    
+    // Cultural variations for game elements
+    this.culturalVariations = {
+      commentary: [
+        "european", "latin", "asian", "african", "arabic", "american"
+      ],
+      celebrations: [
+        "standard", "latin", "african", "asian", "european", "middle_eastern"
+      ],
+      crowdChants: [
+        "european", "passionate", "rhythmic", "drums", "organized"
+      ],
+      languageOptions: [
+        "english", "spanish", "arabic", "japanese", "french", 
+        "german", "portuguese", "russian", "chinese", "korean"
+      ],
+      musicStyles: [
+        "international", "latin", "electronic", "rock", "hip_hop", 
+        "classical", "african", "asian", "middle_eastern"
+      ]
+    };
+  }
+  
+  /**
+   * Set user's cultural preferences
+   */
+  setUserCulturalPreferences(username, preferences) {
+    const user = this.userAccountSystem.getUser(username);
+    if (!user) throw new Error("User not found");
+    
+    // Set or update cultural preferences
+    user.culturalPreferences = {
+      region: preferences.region || "international",
+      commentary: preferences.commentary || "international",
+      celebrations: preferences.celebrations || "standard",
+      crowdChants: preferences.crowdChants || "international",
+      language: preferences.language || "english",
+      music: preferences.music || "international",
+      adaptToEvents: preferences.adaptToEvents !== undefined ? preferences.adaptToEvents : true,
+      adaptToLocation: preferences.adaptToLocation !== undefined ? preferences.adaptToLocation : false
+    };
+    
+    // Save user updates
+    this.userAccountSystem.updateUser(user);
+    
+    return user.culturalPreferences;
+  }
+  
+  /**
+   * Get available cultural customization options
+   */
+  getCustomizationOptions() {
+    return {
+      regions: Object.values(this.regionalThemes).map(region => ({
+        id: region.id,
+        name: region.name
+      })),
+      variations: this.culturalVariations
+    };
+  }
+  
+  /**
+   * Get appropriate theme based on current events and user preferences
+   */
+  getActiveTheme(username) {
+    const user = this.userAccountSystem.getUser(username);
+    if (!user) throw new Error("User not found");
+    
+    // Get user preferences
+    const preferences = user.culturalPreferences || {
+      region: "international",
+      adaptToEvents: true
+    };
+    
+    // If adapting to events and there's an active cultural event, use that theme
+    if (preferences.adaptToEvents) {
+      // This would check current events from the CulturalEventsSystem
+      // For this example, we'll just return the user's regional preference
+    }
+    
+    // Get regional theme based on preference
+    const regionalTheme = this.regionalThemes[preferences.region] || {
+      id: "international",
+      name: "International Football",
+      stadiums: ["wembley", "camp_nou", "maracana", "azteca"],
+      teams: ["world_xi", "all_stars", "legends", "rising_stars"],
+      commentary: "international",
+      crowdChants: "mixed",
+      weatherPatterns: ["clear", "rain", "cloudy", "foggy"]
+    };
+    
+    return {
+      ...regionalTheme,
+      commentary: preferences.commentary || regionalTheme.commentary,
+      celebrations: preferences.celebrations || "standard",
+      crowdChants: preferences.crowdChants || regionalTheme.crowdChants,
+      language: preferences.language || "english",
+      music: preferences.music || "international"
+    };
+  }
+  
+  /**
+   * Get a random weather condition based on active theme
+   */
+  getRandomWeather(theme) {
+    const patterns = theme.weatherPatterns || ["clear", "rain", "cloudy"];
+    const randomIndex = Math.floor(Math.random() * patterns.length);
+    return patterns[randomIndex];
+  }
+  
+  /**
+   * Get a random stadium based on active theme
+   */
+  getRandomStadium(theme) {
+    const stadiums = theme.stadiums || ["international_stadium"];
+    const randomIndex = Math.floor(Math.random() * stadiums.length);
+    return stadiums[randomIndex];
+  }
+}
+
+// Export modules
+export {
+  CulturalEventsSystem,
+  CulturalCustomizationSystem
+};
+/**
+ * Cultural Events and Special Celebrations System
+ * Manages global holiday events, cultural celebrations, and special themed rewards
+ */
+class CulturalEventsSystem {
+  constructor(userAccountSystem, achievementSystem, blockchainManager) {
+    this.userAccountSystem = userAccountSystem;
+    this.achievementSystem = achievementSystem;
+    this.blockchainManager = blockchainManager;
+    
+    // Initialize cultural events calendar
+    this.eventsCalendar = this.buildEventsCalendar();
+    
+    // Special event notifications
+    this.eventNotifications = new Map();
+  }
+  
+  /**
+   * Build the annual events calendar with all cultural celebrations
+   * Dates are approximate and will be adjusted each year based on actual calendar
+   */
+  buildEventsCalendar() {
+    const currentYear = new Date().getFullYear();
+    
+    return {
+      // Western/Christian holidays
+      christmas: {
+        id: "christmas",
+        name: "Christmas Celebration",
+        description: "Celebrate the holiday season with special football matches and festive rewards",
+        startDate: new Date(currentYear, 11, 15), // December 15
+        endDate: new Date(currentYear, 11, 31), // December 31
+        category: "western",
+        theme: {
+          colors: ["#ff0000", "#006400", "#ffffff"], // Red, Green, White
+          icon: "christmas_tree",
+          background: "snowy_stadium"
+        },
+        rewards: {
+          tokens: 100,
+          exclusiveItems: [
+            { id: "santa_kit", name: "Santa's Kit", type: "kit", rarity: "Legendary" },
+            { id: "snow_ball", name: "Snow Ball", type: "ball", rarity: "Epic" },
+            { id: "christmas_stadium", name: "Christmas Stadium", type: "stadium", rarity: "Epic" }
+          ],
+          challenges: [
+            { id: "score_25_goals", name: "Score 25 goals during the event", reward: 50 },
+            { id: "win_10_matches", name: "Win 10 matches during the event", reward: 75 },
+            { id: "play_christmas_day", name: "Play a match on Christmas Day", reward: 100 }
+          ]
+        }
+      },
+      easter: {
+        id: "easter",
+        name: "Easter Tournament",
+        description: "Join the special Easter tournament with egg hunt mechanics",
+        // Easter date varies year to year - this will be updated annually
+        startDate: null, // Calculated dynamically
+        endDate: null, // Calculated dynamically
+        category: "western",
+        theme: {
+          colors: ["#ffff66", "#add8e6", "#ffc0cb"], // Yellow, Light Blue, Pink
+          icon: "easter_egg",
+          background: "spring_stadium"
+        },
+        rewards: {
+          tokens: 75,
+          exclusiveItems: [
+            { id: "bunny_celebration", name: "Bunny Celebration", type: "animation", rarity: "Epic" },
+            { id: "easter_egg_ball", name: "Easter Egg Ball", type: "ball", rarity: "Rare" }
+          ],
+          challenges: [
+            { id: "egg_hunt", name: "Find all hidden eggs on the field", reward: 60 },
+            { id: "easter_tournament", name: "Reach the semifinals in Easter Tournament", reward: 80 }
+          ]
+        }
+      },
+      halloween: {
+        id: "halloween",
+        name: "Spooky Football",
+        description: "Play in haunted stadiums with special Halloween-themed rules",
+        startDate: new Date(currentYear, 9, 24), // October 24
+        endDate: new Date(currentYear, 10, 1), // November 1
+        category: "western",
+        theme: {
+          colors: ["#ff6600", "#000000", "#663399"], // Orange, Black, Purple
+          icon: "pumpkin",
+          background: "haunted_stadium"
+        },
+        rewards: {
+          tokens: 80,
+          exclusiveItems: [
+            { id: "skeleton_kit", name: "Skeleton Kit", type: "kit", rarity: "Epic" },
+            { id: "pumpkin_ball", name: "Pumpkin Ball", type: "ball", rarity: "Rare" },
+            { id: "zombie_celebration", name: "Zombie Celebration", type: "animation", rarity: "Epic" }
+          ],
+          challenges: [
+            { id: "night_matches", name: "Win 5 night matches", reward: 40 },
+            { id: "halloween_goals", name: "Score 13 goals during Halloween", reward: 66 }
+          ]
+        }
+      },
+      valentines: {
+        id: "valentines",
+        name: "Love of the Game",
+        description: "Special Valentine's Day events celebrating the love of football",
+        startDate: new Date(currentYear, 1, 10), // February 10
+        endDate: new Date(currentYear, 1, 15), // February 15
+        category: "western",
+        theme: {
+          colors: ["#ff69b4", "#ffffff", "#ff0000"], // Pink, White, Red
+          icon: "heart",
+          background: "rose_stadium"
+        },
+        rewards: {
+          tokens: 50,
+          exclusiveItems: [
+            { id: "heart_ball", name: "Heart Ball", type: "ball", rarity: "Rare" },
+            { id: "love_celebration", name: "Love Celebration", type: "animation", rarity: "Uncommon" }
+          ],
+          challenges: [
+            { id: "play_feb14", name: "Play a match on February 14th", reward: 30 },
+            { id: "teammate_pass", name: "Complete 50 successful passes to teammates", reward: 40 }
+          ]
+        }
+      },
+      
+      // Lunar New Year (Chinese New Year)
+      lunarNewYear: {
+        id: "lunar_new_year",
+        name: "Lunar New Year Festival",
+        description: "Celebrate the Lunar New Year with golden prosperity matches",
+        // Lunar New Year date varies year to year - this will be updated annually
+        startDate: null, // Calculated dynamically
+        endDate: null, // Calculated dynamically 
+        category: "asian",
+        theme: {
+          colors: ["#ff0000", "#ffd700", "#000000"], // Red, Gold, Black
+          icon: "dragon",
+          background: "lantern_stadium"
+        },
+        rewards: {
+          tokens: 88, // 8 is lucky in Chinese culture
+          exclusiveItems: [
+            { id: "zodiac_kit", name: "Zodiac Animal Kit", type: "kit", rarity: "Legendary" },
+            { id: "dragon_ball", name: "Dragon Ball", type: "ball", rarity: "Epic" },
+            { id: "prosperity_stadium", name: "Prosperity Stadium", type: "stadium", rarity: "Epic" }
+          ],
+          challenges: [
+            { id: "score_8_goals", name: "Score 8 goals in a single match", reward: 88 },
+            { id: "win_8_matches", name: "Win 8 matches during the festival", reward: 88 }
+          ]
+        }
+      },
+      
+      // Islamic celebrations
+      ramadan: {
+        id: "ramadan",
+        name: "Ramadan Football Cup",
+        description: "Special evening matches during the holy month of Ramadan",
+        // Ramadan date varies year to year - this will be updated annually
+        startDate: null, // Calculated dynamically
+        endDate: null, // Calculated dynamically
+        category: "islamic",
+        theme: {
+          colors: ["#00cc99", "#ffffff", "#cc9900"], // Teal, White, Gold
+          icon: "crescent_moon",
+          background: "evening_stadium"
+        },
+        rewards: {
+          tokens: 70,
+          exclusiveItems: [
+            { id: "ramadan_kit", name: "Ramadan Kit", type: "kit", rarity: "Epic" },
+            { id: "crescent_ball", name: "Crescent Ball", type: "ball", rarity: "Rare" },
+            { id: "lantern_celebration", name: "Lantern Celebration", type: "animation", rarity: "Rare" }
+          ],
+          challenges: [
+            { id: "evening_matches", name: "Play 10 matches after sunset", reward: 50 },
+            { id: "ramadan_tournament", name: "Win the Ramadan tournament", reward: 100 }
+          ]
+        }
+      },
+      eidAlFitr: {
+        id: "eid_al_fitr",
+        name: "Eid al-Fitr Celebration",
+        description: "Celebrate Eid with special football festivities and rewards",
+        // Eid date varies year to year - this will be updated annually
+        startDate: null, // Calculated dynamically
+        endDate: null, // Calculated dynamically
+        category: "islamic",
+        theme: {
+          colors: ["#00cc99", "#ffffff", "#cc9900"], // Teal, White, Gold
+          icon: "crescent_star",
+          background: "festive_stadium"
+        },
+        rewards: {
+          tokens: 60,
+          exclusiveItems: [
+            { id: "eid_kit", name: "Eid Kit", type: "kit", rarity: "Rare" },
+            { id: "festive_ball", name: "Festive Ball", type: "ball", rarity: "Uncommon" }
+          ],
+          challenges: [
+            { id: "eid_matches", name: "Play 5 matches during Eid", reward: 40 },
+            { id: "friendship_passes", name: "Complete 30 passes to teammates", reward: 30 }
+          ]
+        }
+      },
+      
+      // Indian celebrations
+      diwali: {
+        id: "diwali",
+        name: "Diwali Festival of Lights",
+        description: "Celebrate Diwali with illuminated night matches and special rewards",
+        // Diwali date varies year to year - this will be updated annually
+        startDate: null, // Calculated dynamically
+        endDate: null, // Calculated dynamically
+        category: "indian",
+        theme: {
+          colors: ["#ff9933", "#ffffff", "#138808"], // Saffron, White, Green (Indian flag colors)
+          icon: "diya_lamp",
+          background: "illuminated_stadium"
+        },
+        rewards: {
+          tokens: 75,
+          exclusiveItems: [
+            { id: "light_festival_kit", name: "Festival of Lights Kit", type: "kit", rarity: "Epic" },
+            { id: "sparkle_ball", name: "Sparkle Ball", type: "ball", rarity: "Rare" },
+            { id: "fireworks_celebration", name: "Fireworks Celebration", type: "animation", rarity: "Epic" }
+          ],
+          challenges: [
+            { id: "night_victories", name: "Win 5 night matches during Diwali", reward: 50 },
+            { id: "light_tournament", name: "Reach the finals in the Diwali tournament", reward: 75 }
+          ]
+        }
+      },
+      holi: {
+        id: "holi",
+        name: "Holi Festival of Colors",
+        description: "Play in colorful stadiums during the joyful Holi celebration",
+        // Holi date varies year to year - this will be updated annually
+        startDate: null, // Calculated dynamically
+        endDate: null, // Calculated dynamically
+        category: "indian",
+        theme: {
+          colors: ["#ff0000", "#00ff00", "#0000ff", "#ffff00", "#ff00ff"], // Multiple bright colors
+          icon: "color_splash",
+          background: "colorful_stadium"
+        },
+        rewards: {
+          tokens: 65,
+          exclusiveItems: [
+            { id: "color_splash_kit", name: "Color Splash Kit", type: "kit", rarity: "Epic" },
+            { id: "rainbow_ball", name: "Rainbow Ball", type: "ball", rarity: "Epic" },
+            { id: "color_celebration", name: "Color Celebration", type: "animation", rarity: "Rare" }
+          ],
+          challenges: [
+            { id: "colorful_goals", name: "Score goals with 5 different players", reward: 50 },
+            { id: "holi_tournament", name: "Participate in the Holi tournament", reward: 40 }
+          ]
+        }
+      },
+      
+      // Japanese celebrations
+      hanami: {
+        id: "hanami",
+        name: "Cherry Blossom Tournament",
+        description: "Play under beautiful cherry blossoms in this special spring tournament",
+        startDate: new Date(currentYear, 2, 20), // March 20
+        endDate: new Date(currentYear, 3, 10), // April 10
+        category: "japanese",
+        theme: {
+          colors: ["#FFB7C5", "#ffffff", "#89CFF0"], // Cherry Blossom Pink, White, Light Blue
+          icon: "cherry_blossom",
+          background: "sakura_stadium"
+        },
+        rewards: {
+          tokens: 60,
+          exclusiveItems: [
+            { id: "sakura_kit", name: "Sakura Kit", type: "kit", rarity: "Epic" },
+            { id: "blossom_ball", name: "Blossom Ball", type: "ball", rarity: "Rare" },
+            { id: "petal_celebration", name: "Petal Dance Celebration", type: "animation", rarity: "Uncommon" }
+          ],
+          challenges: [
+            { id: "spring_matches", name: "Win 7 matches during the cherry blossom season", reward: 40 },
+            { id: "blossom_tournament", name: "Reach the quarterfinals in the Hanami tournament", reward: 50 }
+          ]
+        }
+      },
+      
+      // Global events
+      worldCup: {
+        id: "world_cup",
+        name: "World Cup Celebration",
+        description: "Celebrate the World Cup with special international-themed events",
+        // Scheduled around actual World Cup - updated every 4 years
+        startDate: null, // Set based on actual World Cup dates
+        endDate: null, // Set based on actual World Cup dates
+        category: "global",
+        theme: {
+          colors: ["#00bfff", "#ffffff", "#ffd700"], // Blue, White, Gold
+          icon: "trophy",
+          background: "international_stadium"
+        },
+        rewards: {
+          tokens: 150,
+          exclusiveItems: [
+            { id: "national_kit", name: "National Team Kit", type: "kit", rarity: "Legendary" },
+            { id: "golden_trophy_ball", name: "Golden Trophy Ball", type: "ball", rarity: "Legendary" },
+            { id: "world_champion_celebration", name: "World Champion Celebration", type: "animation", rarity: "Legendary" }
+          ],
+          challenges: [
+            { id: "international_matches", name: "Play 15 international-style matches", reward: 75 },
+            { id: "world_tournament", name: "Win the World Tournament", reward: 150 },
+            { id: "nation_collection", name: "Collect 5 different national team jerseys", reward: 100 }
+          ]
+        }
+      },
+      olympics: {
+        id: "olympics",
+        name: "Olympic Games Special",
+        description: "Join the Olympic spirit with special tournaments and rewards",
+        // Scheduled around actual Olympics - updated every 4 years
+        startDate: null, // Set based on actual Olympic dates
+        endDate: null, // Set based on actual Olympic dates
+        category: "global",
+        theme: {
+          colors: ["#0081c8", "#fcb131", "#000000", "#00a651", "#ee334e"], // Olympic ring colors
+          icon: "olympic_rings",
+          background: "olympic_stadium"
+        },
+        rewards: {
+          tokens: 125,
+          exclusiveItems: [
+            { id: "olympic_kit", name: "Olympic Kit", type: "kit", rarity: "Legendary" },
+            { id: "medal_ball", name: "Medal Ball", type: "ball", rarity: "Epic" },
+            { id: "podium_celebration", name: "Podium Celebration", type: "animation", rarity: "Epic" }
+          ],
+          challenges: [
+            { id: "medal_matches", name: "Win medals in 3 different Olympic tournaments", reward: 100 },
+            { id: "olympic_record", name: "Set a new record score in a match", reward: 75 }
+          ]
+        }
+      },
+      
+      // Special Football Celebrations
+      championsLeagueFinal: {
+        id: "champions_league_final",
+        name: "Champions League Final Weekend",
+        description: "Celebrate the biggest club match in football with special events",
+        // Date set annually based on actual Champions League final
+        startDate: null, // Set based on actual Champions League final date
+        endDate: null, // Set based on actual Champions League final date
+        category: "football",
+        theme: {
+          colors: ["#0000ff", "#ffffff", "#c0c0c0"], // Blue, White, Silver
+          icon: "champions_trophy",
+          background: "champions_stadium"
+        },
+        rewards: {
+          tokens: 100,
+          exclusiveItems: [
+            { id: "champions_kit", name: "Champions Kit", type: "kit", rarity: "Epic" },
+            { id: "starball", name: "Star Ball", type: "ball", rarity: "Epic" },
+            { id: "champions_celebration", name: "Champions Celebration", type: "animation", rarity: "Rare" }
+          ],
+          challenges: [
+            { id: "final_prediction", name: "Correctly predict the Champions League final score", reward: 80 },
+            { id: "elite_tournament", name: "Win the Elite Club Tournament", reward: 90 }
+          ]
+        }
+      }
+    };
+  }
+  
+  /**
+   * Update variable dates for holidays that change each year
+   * This would be called at the beginning of each year
+   */
+  updateAnnualDates(year) {
+    // This would use algorithms or API calls to get the actual dates
+    // For this example, we'll just set placeholder dates
+    
+    // Easter (first Sunday after the first full moon on or after March 21)
+    // Simplified calculation - would use actual astronomical calculations in production
+    this.eventsCalendar.easter.startDate = new Date(year, 2, 25); // Approximate
+    this.eventsCalendar.easter.endDate = new Date(year, 3, 5); // Approximate
+    
+    // Lunar New Year (between Jan 21 and Feb 20)
+    this.eventsCalendar.lunarNewYear.startDate = new Date(year, 0, 25); // Approximate
+    this.eventsCalendar.lunarNewYear.endDate = new Date(year, 1, 15); // Approximate
+    
+    // Ramadan (moves ~11 days earlier each solar year)
+    this.eventsCalendar.ramadan.startDate = new Date(year, 2, 10); // Approximate
+    this.eventsCalendar.ramadan.endDate = new Date(year, 3, 10); // Approximate
+    
+    // Eid al-Fitr (follows Ramadan)
+    this.eventsCalendar.eidAlFitr.startDate = new Date(year, 3, 11); // Approximate
+    this.eventsCalendar.eidAlFitr.endDate = new Date(year, 3, 14); // Approximate
+    
+    // Diwali (between October and November)
+    this.eventsCalendar.diwali.startDate = new Date(year, 9, 25); // Approximate
+    this.eventsCalendar.diwali.endDate = new Date(year, 9, 30); // Approximate
+    
+    // Holi (February or March)
+    this.eventsCalendar.holi.startDate = new Date(year, 2, 5); // Approximate
+    this.eventsCalendar.holi.endDate = new Date(year, 2, 10); // Approximate
+    
+    // Major sporting events (quad-annual events)
+    if (year % 4 === 0) { // Olympic years
+      this.eventsCalendar.olympics.startDate = new Date(year, 6, 24); // Approximate summer olympics
+      this.eventsCalendar.olympics.endDate = new Date(year, 7, 9);
+    }
+    
+    if (year % 4 === 2) { // World Cup years (even years between Olympics)
+      this.eventsCalendar.worldCup.startDate = new Date(year, 5, 10); // Approximate
+      this.eventsCalendar.worldCup.endDate = new Date(year, 6, 10);
+    }
+    
+    // Annual sporting events
+    this.eventsCalendar.championsLeagueFinal.startDate = new Date(year, 4, 25); // Late May approximate
+    this.eventsCalendar.championsLeagueFinal.endDate = new Date(year, 4, 28);
+  }
+  
+  /**
+   * Get current active events
+   */
+  getActiveEvents() {
+    const now = new Date();
+    
+    const activeEvents = Object.values(this.eventsCalendar).filter(event => {
+      if (!event.startDate || !event.endDate) return false;
+      return now >= event.startDate && now <= event.endDate;
+    });
+    
+    return activeEvents;
+  }
+  
+  /**
+   * Get upcoming events in the next 30 days
+   */
+  getUpcomingEvents() {
+    const now = new Date();
+    const thirtyDaysLater = new Date(now);
+    thirtyDaysLater.setDate(now.getDate() + 30);
+    
+    const upcomingEvents = Object.values(this.eventsCalendar).filter(event => {
+      if (!event.startDate) return false;
+      return event.startDate > now && event.startDate <= thirtyDaysLater;
+    });
+    
+    return upcomingEvents;
+  }
+  
+  /**
+   * Initialize user's event participation
+   */
+  initializeUserEvents(username) {
+    const user = this.userAccountSystem.getUser(username);
+    if (!user) throw new Error("User not found");
+    
+    // Initialize events tracking if not exists
+    user.events = user.events || {
+      participated: [],
+      active: [],
+      rewards: [],
+      challengeProgress: {}
+    };
+    
+    // Update active events
+    const activeEvents = this.getActiveEvents();
+    
+    // Add any new active events that the user hasn't started yet
+    for (const event of activeEvents) {
+      if (!user.events.active.includes(event.id)) {
+        user.events.active.push(event.id);
+        
+        // Initialize challenge progress for this event
+        user.events.challengeProgress[event.id] = {};
+        for (const challenge of event.rewards.challenges) {
+          user.events.challengeProgress[event.id][challenge.id] = {
+            progress: 0,
+            completed: false,
+            claimed: false
+          };
+        }
+      }
+    }
+    
+    // Remove any events that are no longer active
+    user.events.active = user.events.active.filter(eventId => 
+      activeEvents.some(event => event.id === eventId)
+    );
+    
+    // Save user updates
+    this.userAccountSystem.updateUser(user);
+    
+    return {
+      active: user.events.active.map(eventId => {
+        const event = this.eventsCalendar[eventId] || Object.values(this.eventsCalendar).find(e => e.id === eventId);
+        return {
+          id: event.id,
+          name: event.name,
+          description: event.description,
+          endDate: event.endDate,
+          challenges: event.rewards.challenges.map(challenge => ({
+            id: challenge.id,
+            name: challenge.name,
+            reward: challenge.reward,
+            progress: user.events.challengeProgress[event.id][challenge.id].progress,
+            completed: user.events.challengeProgress[event.id][challenge.id].completed,
+            claimed: user.events.challengeProgress[event.id][challenge.id].claimed
+          }))
+        };
+      }),
+      upcoming: this.getUpcomingEvents().map(event => ({
+        id: event.id,
+        name: event.name,
+        description: event.description,
+        startDate: event.startDate,
+        endDate: event.endDate,
+        daysUntilStart: Math.ceil((event.startDate - new Date()) / (1000 * 60 * 60 * 24))
+      }))
+    };
+  }
+  
+  /**
+   * Record user's activity for event challenges
+   */
+  async updateEventChallengeProgress(username, eventId, challengeId, increment = 1) {
+    const user = this.userAccountSystem.getUser(username);
+    if (!user) throw new Error("User not found");
+    
+    // Make sure events tracking is initialized
+    await this.initializeUserEvents(username);
+    
+    // Check if user is participating in this event
+    if (!user.events.active.includes(eventId)) {
+      throw new Error("User is not participating in this event");
+    }
+    
+    // Find the event
+    const event = this.eventsCalendar[eventId] || Object.values(this.eventsCalendar).find(e => e.id === eventId);
+    if (!event) throw new Error("Event not found");
+    
+    // Find the challenge
+    const challenge = event.rewards.challenges.find(c => c.id === challengeId);
+    if (!challenge) throw new Error("Challenge not found");
+    
+    // Check if challenge already completed
+    if (user.events.challengeProgress[eventId][challengeId].completed) {
+      return { status: 'already_completed' };
+    }
+    
+    // Update progress
+    user.events.challengeProgress[eventId][challengeId].progress += increment;
+    
+    // Check if challenge is now completed
+    const challengeConfig = event.rewards.challenges.find(c => c.id === challengeId);
+    const requirementRegex = /(\d+)/; // Extract number from challenge name
+    const match = challengeConfig.name.match(requirementRegex);
+    const requirement = match ? parseInt(match[1], 10) : 1;
+    
+    if (user.events.challengeProgress[eventId][challengeId].progress >= requirement) {
+      user.events.challengeProgress[eventId][challengeId].completed = true;
+    }
+    
+    // Save user updates
+    this.userAccountSystem.updateUser(user);
+    
+    return {
+      status: user.events.challengeProgress[eventId][challengeId].completed ? 'completed' : 'in_progress',
+      progress: user.events.challengeProgress[eventId][challengeId].progress,
+      requirement
+    };
+  }
+  
+  /**
+   * Claim reward for a completed event challenge
+   */
+  async claimEventChallengeReward(username, eventId, challengeId) {
+    const user = this.userAccountSystem.getUser(username);
+    if (!user) throw new Error("User not found");
+    
+    // Check if event and challenge exist
+    if (!user.events.challengeProgress[eventId] ||
+        !user.events.challengeProgress[eventId][challengeId]) {
+      throw new Error("Event or challenge not found");
+    }
+    
+    // Check if challenge is completed
+    if (!user.events.challengeProgress[eventId][challengeId].completed) {
+      throw new Error("Challenge not completed");
+    }
+    
+    // Check if reward already claimed
+    if (user.events.challengeProgress[eventId][challengeId].claimed) {
+      throw new Error("Reward already claimed");
+    }
+    
+    // Find the event
+    const event = this.eventsCalendar[eventId] || Object.values(this.eventsCalendar).find(e => e.id === eventId);
+    if (!event) throw new Error("Event configuration not found");
+    
+    // Find the challenge
+    const challenge = event.rewards.challenges.find(c => c.id === challengeId);
+    if (!challenge) throw new Error("Challenge configuration not found");
+    
+    // Mark as claimed
+    user.events.challengeProgress[eventId][challengeId].claimed = true;
+    
+    // Award tokens
+    user.points = user.points || 0;
+    user.points += challenge.reward;
+    
+    // Add to rewards history
+    user.events.rewards.push({
+      eventId,
+      challengeId,
+      tokens: challenge.reward,
+      itemId: null,
+      claimedAt: new Date()
+    });
+    
+    // Award blockchain tokens if applicable
+    if (user.isKycVerified && user.walletAddress) {
+      try {
+        await this.blockchainManager.awardTokens(
+          user.walletAddress,
+          challenge.reward,
+          `Event Challenge: ${challenge.name} in ${event.name}`
+        );
+      } catch (error) {
+        console.error("Failed to award blockchain tokens for event challenge:", error);
+      }
+    } else if (user.age < 18) {
+      // For underage users, store rewards to be claimed later
+      user.pendingBlockchainRewards = user.pendingBlockchainRewards || [];
+      user.pendingBlockchainRewards.push({
+        amount: challenge.reward,
+        reason: `Event Challenge: ${challenge.name} in ${event.name}`,
+        timestamp: new Date()
+      });
+    }
+    
+    // Check if all challenges for this event are completed
+    const allChallengesCompleted = Object.values(user.events.challengeProgress[eventId])
+      .every(c => c.completed && c.claimed);
+    
+    // If all challenges completed, award exclusive items
+    if (allChallengesCompleted) {
+      // Add event completion to participated list if not already there
+      if (!user.events.participated.includes(eventId)) {
+        user.events.participated.push(eventId);
+      }
+      
+      // Award event tokens
+      user.points += event.rewards.tokens;
+      
+      // Add to rewards history
+      user.events.rewards.push({
+        eventId,
+        challengeId: 'completion',
+        tokens: event.rewards.tokens,
+        itemIds: event.rewards.exclusiveItems.map(item => item.id),
+        claimedAt: new Date()
+      });
+      
+      // Unlock exclusive items
+      user.unlockables = user.unlockables || { unlocked: [], equipped: {} };
+      for (const item of event.rewards.exclusiveItems) {
+        if (!user.unlockables.unlocked.includes(item.id)) {
+          user.unlockables.unlocked.push(item.id);
+        }
+      }
+      
+      // Award blockchain tokens and NFTs if applicable
+      if (user.isKycVerified && user.walletAddress) {
+        try {
+          await this.blockchainManager.awardTokens(
+            user.walletAddress,
+            event.rewards.tokens,
+            `Event Completion: ${event.name}`
+          );
+          
+          // Mint NFT for rarest exclusive item
+          const rarityOrder = ["Common", "Uncommon", "Rare", "Epic", "Legendary"];
+          const items = [...event.rewards.exclusiveItems];
+          items.sort((a, b) => 
+            rarityOrder.indexOf(b.rarity) - rarityOrder.indexOf(a.rarity)
+          );

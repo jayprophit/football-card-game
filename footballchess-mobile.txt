@@ -1,0 +1,2 @@
+// App.tsx - Main entry point for the React Native app
+import React, { useState, use

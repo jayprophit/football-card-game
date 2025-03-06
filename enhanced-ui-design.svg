@@ -1,0 +1,177 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 800 600">
+  <!-- Definitions -->
+  <defs>
+    <!-- UI Gradients and Effects -->
+    <linearGradient id="headerGradient" x1="0%" y1="0%" x2="100%" y2="0%">
+      <stop offset="0%" stop-color="#1A237E" />
+      <stop offset="100%" stop-color="#283593" />
+    </linearGradient>
+    
+    <linearGradient id="buttonGradient" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" stop-color="#4CAF50" />
+      <stop offset="100%" stop-color="#388E3C" />
+    </linearGradient>
+    
+    <linearGradient id="redButtonGradient" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" stop-color="#F44336" />
+      <stop offset="100%" stop-color="#D32F2F" />
+    </linearGradient>
+    
+    <linearGradient id="blueButtonGradient" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" stop-color="#2196F3" />
+      <stop offset="100%" stop-color="#1976D2" />
+    </linearGradient>
+    
+    <linearGradient id="goldGradient" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#FFC107" />
+      <stop offset="100%" stop-color="#FFA000" />
+    </linearGradient>
+    
+    <filter id="dropShadow" x="-20%" y="-20%" width="140%" height="140%">
+      <feGaussianBlur in="SourceAlpha" stdDeviation="3" />
+      <feOffset dx="0" dy="2" result="offsetblur" />
+      <feComponentTransfer>
+        <feFuncA type="linear" slope="0.5" />
+      </feComponentTransfer>
+      <feMerge>
+        <feMergeNode />
+        <feMergeNode in="SourceGraphic" />
+      </feMerge>
+    </filter>
+    
+    <filter id="glow" x="-20%" y="-20%" width="140%" height="140%">
+      <feGaussianBlur in="SourceAlpha" stdDeviation="2" />
+      <feComponentTransfer>
+        <feFuncA type="linear" slope="2" intercept="-0.5" />
+      </feComponentTransfer>
+      <feFlood flood-color="#80DEEA" result="color" />
+      <feComposite in="color" in2="SourceAlpha" operator="in" />
+      <feMerge>
+        <feMergeNode />
+        <feMergeNode in="SourceGraphic" />
+      </feMerge>
+    </filter>
+  </defs>
+  
+  <!-- Main UI Background -->
+  <rect width="800" height="600" fill="#1A2332" />
+  
+  <!-- Header Bar -->
+  <rect width="800" height="60" fill="url(#headerGradient)" />
+  <text x="400" y="38" font-family="Arial" font-size="24" text-anchor="middle" fill="white" font-weight="bold">FOOTBALLCHESS</text>
+  
+  <!-- Game Board Preview -->
+  <rect x="50" y="80" width="520" height="350" rx="10" fill="#388E3C" stroke="#FFFFFF" stroke-width="2" />
+  <rect x="170" y="80" width="2" height="350" stroke="#FFFFFF" stroke-width="2" />
+  <rect x="290" y="80" width="2" height="350" stroke="#FFFFFF" stroke-width="2" />
+  <rect x="410" y="80" width="2" height="350" stroke="#FFFFFF" stroke-width="2" />
+  <circle cx="290" cy="255" r="40" fill="none" stroke="#FFFFFF" stroke-width="2" />
+  
+  <!-- Match Information Panel -->
+  <rect x="50" y="440" width="520" height="140" rx="10" fill="rgba(255,255,255,0.1)" />
+  
+  <!-- Score Display -->
+  <rect x="100" y="455" width="420" height="50" rx="10" fill="rgba(0,0,0,0.3)" />
+  
+  <!-- Team 1 Info -->
+  <circle cx="140" cy="480" r="20" fill="#D32F2F" />
+  <text x="140" y="485" font-family="Arial" font-size="14" text-anchor="middle" fill="white" font-weight="bold">MCI</text>
+  
+  <!-- Score -->
+  <text x="290" y="490" font-family="Arial" font-size="30" text-anchor="middle" fill="white" font-weight="bold">2 - 1</text>
+  
+  <!-- Team 2 Info -->
+  <circle cx="440" cy="480" r="20" fill="#1976D2" />
+  <text x="440" y="485" font-family="Arial" font-size="14" text-anchor="middle" fill="white" font-weight="bold">RMA</text>
+  
+  <!-- Match Time -->
+  <text x="290" y="515" font-family="Arial" font-size="14" text-anchor="middle" fill="#BBDEFB">75'</text>
+  
+  <!-- Match Statistics -->
+  <line x1="100" y1="525" x2="520" y2="525" stroke="rgba(255,255,255,0.3)" stroke-width="1" />
+  
+  <!-- Possession -->
+  <text x="150" y="545" font-family="Arial" font-size="12" text-anchor="start" fill="white">Possession</text>
+  <rect x="250" y="540" width="200" height="10" rx="5" fill="rgba(0,0,0,0.5)" />
+  <rect x="250" y="540" width="120" height="10" rx="5" fill="#D32F2F" />
+  <text x="350" y="545" font-family="Arial" font-size="10" text-anchor="middle" fill="white" font-weight="bold">60%</text>
+  <text x="470" y="545" font-family="Arial" font-size="10" text-anchor="end" fill="white" font-weight="bold">40%</text>
+  
+  <!-- Cards -->
+  <text x="150" y="565" font-family="Arial" font-size="12" text-anchor="start" fill="white">Cards</text>
+  <rect x="250" y="560" width="15" height="10" fill="#FFC107" />
+  <text x="270" y="568" font-family="Arial" font-size="12" fill="white">1</text>
+  <rect x="290" y="560" width="15" height="10" fill="#F44336" />
+  <text x="310" y="568" font-family="Arial" font-size="12" fill="white">0</text>
+  <rect x="400" y="560" width="15" height="10" fill="#FFC107" />
+  <text x="420" y="568" font-family="Arial" font-size="12" fill="white">2</text>
+  <rect x="440" y="560" width="15" height="10" fill="#F44336" />
+  <text x="460" y="568" font-family="Arial" font-size="12" fill="white">1</text>
+  
+  <!-- Right Side Panel -->
+  <rect x="590" y="80" width="190" height="500" rx="10" fill="rgba(255,255,255,0.1)" />
+  
+  <!-- Player Selection Header -->
+  <rect x="590" y="80" width="190" height="40" rx="10 10 0 0" fill="url(#headerGradient)" />
+  <text x="685" y="105" font-family="Arial" font-size="16" text-anchor="middle" fill="white" font-weight="bold">PLAYER CARDS</text>
+  
+  <!-- Scrollable Player Card Container (visualization) -->
+  <rect x="600" y="130" width="170" height="390" rx="5" fill="rgba(0,0,0,0.2)" />
+  
+  <!-- Sample Player Cards in Scrollable Container -->
+  <!-- Card 1 (Selected) -->
+  <rect x="610" y="140" width="150" height="90" rx="5" fill="#1565C0" filter="url(#dropShadow)" />
+  <rect x="610" y="140" width="150" height="20" rx="5 5 0 0" fill="url(#goldGradient)" />
+  <circle cx="630" cy="150" r="10" fill="#FFFFFF" />
+  <text x="630" y="154" font-family="Arial" font-size="12" text-anchor="middle" fill="#000000" font-weight="bold">CM</text>
+  <text x="685" y="155" font-family="Arial" font-size="12" text-anchor="middle" fill="#000000" font-weight="bold">De Bruyne</text>
+  <image x="625" y="170" width="40" height="40" href="/api/placeholder/40/40" />
+  <text x="685" y="185" font-family="Arial" font-size="10" text-anchor="start" fill="#FFFFFF">MOV: Queen (2)</text>
+  <text x="685" y="200" font-family="Arial" font-size="10" text-anchor="start" fill="#FFFFFF">Rating: 91</text>
+  <rect x="608" y="138" width="154" height="94" rx="7" stroke="#FFC107" stroke-width="2" fill="none" />
+  
+  <!-- Card 2 -->
+  <rect x="610" y="240" width="150" height="90" rx="5" fill="#1565C0" filter="url(#dropShadow)" />
+  <rect x="610" y="240" width="150" height="20" rx="5 5 0 0" fill="#E0E0E0" />
+  <circle cx="630" cy="250" r="10" fill="#FFFFFF" />
+  <text x="630" y="254" font-family="Arial" font-size="12" text-anchor="middle" fill="#000000" font-weight="bold">ST</text>
+  <text x="685" y="255" font-family="Arial" font-size="12" text-anchor="middle" fill="#000000" font-weight="bold">Haaland</text>
+  <image x="625" y="270" width="40" height="40" href="/api/placeholder/40/40" />
+  <text x="685" y="285" font-family="Arial" font-size="10" text-anchor="start" fill="#FFFFFF">MOV: Rook (4)</text>
+  <text x="685" y="300" font-family="Arial" font-size="10" text-anchor="start" fill="#FFFFFF">Rating: 92</text>
+  
+  <!-- Card 3 -->
+  <rect x="610" y="340" width="150" height="90" rx="5" fill="#1565C0" filter="url(#dropShadow)" />
+  <rect x="610" y="340" width="150" height="20" rx="5 5 0 0" fill="#E0E0E0" />
+  <circle cx="630" cy="350" r="10" fill="#FFFFFF" />
+  <text x="630" y="354" font-family="Arial" font-size="12" text-anchor="middle" fill="#000000" font-weight="bold">GK</text>
+  <text x="685" y="355" font-family="Arial" font-size="12" text-anchor="middle" fill="#000000" font-weight="bold">Ederson</text>
+  <image x="625" y="370" width="40" height="40" href="/api/placeholder/40/40" />
+  <text x="685" y="385" font-family="Arial" font-size="10" text-anchor="start" fill="#FFFFFF">MOV: King (1)</text>
+  <text x="685" y="400" font-family="Arial" font-size="10" text-anchor="start" fill="#FFFFFF">Rating: 89</text>
+  
+  <!-- Control Buttons -->
+  <rect x="600" y="530" width="80" height="40" rx="5" fill="url(#blueButtonGradient)" filter="url(#dropShadow)" />
+  <text x="640" y="555" font-family="Arial" font-size="14" text-anchor="middle" fill="white" font-weight="bold">PASS</text>
+  
+  <rect x="690" y="530" width="80" height="40" rx="5" fill="url(#redButtonGradient)" filter="url(#dropShadow)" />
+  <text x="730" y="555" font-family="Arial" font-size="14" text-anchor="middle" fill="white" font-weight="bold">SHOOT</text>
+  
+  <rect x="600" y="480" width="170" height="40" rx="5" fill="url(#buttonGradient)" filter="url(#dropShadow)" />
+  <text x="685" y="505" font-family="Arial" font-size="14" text-anchor="middle" fill="white" font-weight="bold">END TURN (2/3)</text>
+  
+  <!-- Event Log at Bottom -->
+  <rect x="50" y="590" width="730" height="0" rx="5" fill="rgba(0,0,0,0.5)" />
+  
+  <!-- Floating Action Menu -->
+  <circle cx="750" cy="100" r="20" fill="#FF5722" filter="url(#dropShadow)" />
+  <text x="750" y="106" font-family="Arial" font-size="20" text-anchor="middle" fill="white" font-weight="bold">⚙</text>
+  
+  <!-- Help Button -->
+  <circle cx="750" cy="150" r="20" fill="#673AB7" filter="url(#dropShadow)" />
+  <text x="750" y="156" font-family="Arial" font-size="20" text-anchor="middle" fill="white" font-weight="bold">?</text>
+  
+  <!-- Last Action Notification -->
+  <rect x="150" y="50" width="500" height="20" rx="10" fill="rgba(0,0,0,0.7)" />
+  <text x="400" y="65" font-family="Arial" font-size="12" text-anchor="middle" fill="#FFD54F" font-weight="bold">PASS COMPLETE: DE BRUYNE → FODEN</text>
+</svg>

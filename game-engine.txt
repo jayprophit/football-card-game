@@ -1,0 +1,1035 @@
+// Core Game Engine for FootballChess
+// This file implements the main game logic that can be shared across platforms
+
+// Player class definition
+class Player {
+  constructor({
+    id,
+    name,
+    team,
+    position,
+    number,
+    col,
+    row,
+    movementPattern,
+    photoUrl = null
+  }) {
+    this.id = id;
+    this.name = name;
+    this.team = team; // 'home' or 'away'
+    this.position = position; // 'GK', 'CB', 'LB', 'RB', 'CDM', 'CM', 'CAM', 'LW', 'RW', 'ST'
+    this.number = number;
+    this.col = col; // Column on the board (0-19)
+    this.row = row; // Row on the board (0-9)
+    this.movementPattern = movementPattern; // 'king', 'rook', 'bishop', 'knight', 'queen'
+    this.photoUrl = photoUrl;
+    
+    // Game state properties
+    this.hasBall = false;
+    this.onField = true;
+    this.hasYellowCard = false;
+    this.hasRedCard = false;
+    this.injury = null;
+    this.movementReduction = 0;
+    this.needsSubstitution = false;
+    this.availableNextMatch = true;
+  }
+  
+  // Get possible moves for this player
+  getPossibleMoves(gameState) {
+    return gameState.generatePossibleMoves(this);
+  }
+  
+  // Apply an injury to this player
+  applyInjury(severity, turnOccurred) {
+    this.injury = { severity, turnOccurred };
+    
+    switch (severity) {
+      case 'minor':
+        this.movementReduction = 1;
+        break;
+      case 'serious':
+        this.movementReduction = 2;
+        this.needsSubstitution = Math.random() < 0.5; // 50% chance to need substitution
+        break;
+      case 'season ending':
+        this.onField = false;
+        this.availableNextMatch = false;
+        break;
+    }
+    
+    return this.injury;
+  }
+  
+  // Apply a card to this player
+  applyCard(cardType) {
+    if (cardType === 'yellow') {
+      if (this.hasYellowCard) {
+        // Second yellow = red
+        this.hasYellowCard = false;
+        this.hasRedCard = true;
+        this.onField = false;
+        return 'red'; // Indicate that a red card was given
+      } else {
+        this.hasYellowCard = true;
+        return 'yellow';
+      }
+    } else if (cardType === 'red') {
+      this.hasRedCard = true;
+      this.onField = false;
+      return 'red';
+    }
+  }
+}
+
+// GameState class to manage the entire game state
+class GameState {
+  constructor() {
+    // Game properties
+    this.players = [];
+    this.ball = { col: 10, row: 5 }; // Center of the pitch
+    this.score = { home: 0, away: 0 };
+    this.turnCounter = 1;
+    this.currentTeam = 'home';
+    this.movesRemaining = 3;
+    this.matchTime = 0; // Simulated match time in minutes
+    this.gamePhase = 'play'; // 'play', 'half-time', 'full-time'
+    
+    // Event logs
+    this.events = [];
+    this.lastFoul = null;
+    this.lastInjury = null;
+    this.lastGoal = null;
+  }
+  
+  // Initialize the game with players
+  initializeGame(homeTeam, awayTeam) {
+    // Clear existing players
+    this.players = [];
+    
+    // Add home team players
+    homeTeam.players.forEach(playerData => {
+      const player = new Player({
+        ...playerData,
+        team: 'home'
+      });
+      this.players.push(player);
+    });
+    
+    // Add away team players
+    awayTeam.players.forEach(playerData => {
+      const player = new Player({
+        ...playerData,
+        team: 'away'
+      });
+      this.players.push(player);
+    });
+    
+    // Set initial ball possession
+    const homeStriker = this.players.find(p => p.team === 'home' && p.position === 'ST');
+    if (homeStriker) {
+      homeStriker.hasBall = true;
+      this.ball = { col: homeStriker.col, row: homeStriker.row };
+    }
+    
+    return this;
+  }
+  
+  // Get players on a specific square
+  playersOnSquare(col, row) {
+    return this.players.filter(p => p.col === col && p.row === row && p.onField);
+  }
+  
+  // Check if the ball is on a specific square
+  isBallOnSquare(col, row) {
+    return this.ball.col === col && this.ball.row === row;
+  }
+  
+  // Generate possible moves for a player
+  generatePossibleMoves(player) {
+    const { col, row, movementPattern } = player;
+    const possibleMoves = [];
+    
+    // Apply movement reduction from injuries
+    const moveReduction = player.movementReduction || 0;
+    
+    // Generate moves based on chess piece pattern
+    switch (movementPattern) {
+      case 'king': // Goalkeeper (1 square in any direction)
+        // Can move 1 square in any direction
+        for (let dCol = -1; dCol <= 1; dCol++) {
+          for (let dRow = -1; dRow <= 1; dRow++) {
+            if (dCol === 0 && dRow === 0) continue; // Skip current position
+            
+            const newCol = col + dCol;
+            const newRow = row + dRow;
+            
+            // Check if new position is within bounds
+            if (this.isInBounds(newCol, newRow)) {
+              possibleMoves.push({ col: newCol, row: newRow });
+            }
+          }
+        }
+        
+        // Special goalkeeper diving move (2 squares when ball is in shooting range)
+        if (player.position === 'GK') {
+          // Check if ball is in shooting range
+          const ballOwner = this.players.find(p => p.hasBall);
+          if (ballOwner && this.isInShootingRange(ballOwner)) {
+            // Add diving moves (2 squares laterally)
+            if (this.isInBounds(col, row - 2)) possibleMoves.push({ col, row: row - 2 });
+            if (this.isInBounds(col, row + 2)) possibleMoves.push({ col, row: row + 2 });
+          }
+        }
+        break;
+        
+      case 'rook': // Defenders and Strikers (horizontal and vertical)
+        // Max movement range (reduced if injured)
+        const rookRange = player.position.includes('B') ? 3 : 4; // CBs and FBs have 3, Strikers have 4
+        const adjustedRookRange = Math.max(1, rookRange - moveReduction);
+        
+        // Horizontal and vertical moves
+        for (let dir = 0; dir < 4; dir++) {
+          const dCol = dir === 0 ? 1 : dir === 1 ? -1 : 0;
+          const dRow = dir === 2 ? 1 : dir === 3 ? -1 : 0;
+          
+          for (let i = 1; i <= adjustedRookRange; i++) {
+            const newCol = col + (dCol * i);
+            const newRow = row + (dRow * i);
+            
+            if (this.isInBounds(newCol, newRow)) {
+              possibleMoves.push({ col: newCol, row: newRow });
+            } else {
+              break; // Stop in this direction if out of bounds
+            }
+          }
+        }
+        
+        // Striker special move (1 square diagonally)
+        if (player.position === 'ST') {
+          for (let dCol = -1; dCol <= 1; dCol += 2) {
+            for (let dRow = -1; dRow <= 1; dRow += 2) {
+              const newCol = col + dCol;
+              const newRow = row + dRow;
+              
+              if (this.isInBounds(newCol, newRow)) {
+                possibleMoves.push({ col: newCol, row: newRow });
+              }
+            }
+          }
+        }
+        break;
+        
+      case 'bishop': // Full backs (diagonal)
+        // Max movement range (reduced if injured)
+        const bishopRange = 3; // Full backs have 3 squares range
+        const adjustedBishopRange = Math.max(1, bishopRange - moveReduction);
+        
+        // Diagonal moves
+        for (let dir = 0; dir < 4; dir++) {
+          const dCol = dir < 2 ? 1 : -1;
+          const dRow = dir % 2 === 0 ? 1 : -1;
+          
+          for (let i = 1; i <= adjustedBishopRange; i++) {
+            const newCol = col + (dCol * i);
+            const newRow = row + (dRow * i);
+            
+            if (this.isInBounds(newCol, newRow)) {
+              possibleMoves.push({ col: newCol, row: newRow });
+            } else {
+              break; // Stop in this direction if out of bounds
+            }
+          }
+        }
+        
+        // Full back special move (1 square horizontally)
+        if (player.position.includes('B')) {
+          if (this.isInBounds(col + 1, row)) possibleMoves.push({ col: col + 1, row });
+          if (this.isInBounds(col - 1, row)) possibleMoves.push({ col: col - 1, row });
+        }
+        break;
+        
+      case 'knight': // Wingers and defensive midfielders (L-shape)
+        // Knight moves (L-shape)
+        const knightMoves = [
+          { dCol: 2, dRow: 1 }, { dCol: 2, dRow: -1 },
+          { dCol: -2, dRow: 1 }, { dCol: -2, dRow: -1 },
+          { dCol: 1, dRow: 2 }, { dCol: 1, dRow: -2 },
+          { dCol: -1, dRow: 2 }, { dCol: -1, dRow: -2 }
+        ];
+        
+        for (const move of knightMoves) {
+          const newCol = col + move.dCol;
+          const newRow = row + move.dRow;
+          
+          if (this.isInBounds(newCol, newRow)) {
+            possibleMoves.push({ col: newCol, row: newRow });
+          }
+        }
+        
+        // Winger special move (2 squares horizontally)
+        if (player.position.includes('W')) {
+          if (this.isInBounds(col + 2, row)) possibleMoves.push({ col: col + 2, row });
+          if (this.isInBounds(col - 2, row)) possibleMoves.push({ col: col - 2, row });
+        }
+        
+        // Defensive midfielder special move (1 square in any direction)
+        if (player.position.includes('DM')) {
+          for (let dCol = -1; dCol <= 1; dCol++) {
+            for (let dRow = -1; dRow <= 1; dRow++) {
+              if (dCol === 0 && dRow === 0) continue; // Skip current position
+              
+              const newCol = col + dCol;
+              const newRow = row + dRow;
+              
+              if (this.isInBounds(newCol, newRow)) {
+                possibleMoves.push({ col: newCol, row: newRow });
+              }
+            }
+          }
+        }
+        break;
+        
+      case 'queen': // Midfielders (any direction)
+        // Max movement range (reduced if injured)
+        const queenRange = player.position.includes('AM') ? 3 : 2; // AM has 3, CM has 2
+        const adjustedQueenRange = Math.max(1, queenRange - moveReduction);
+        
+        // Horizontal, vertical, and diagonal moves
+        for (let dCol = -1; dCol <= 1; dCol++) {
+          for (let dRow = -1; dRow <= 1; dRow++) {
+            if (dCol === 0 && dRow === 0) continue; // Skip current position
+            
+            for (let i = 1; i <= adjustedQueenRange; i++) {
+              const newCol = col + (dCol * i);
+              const newRow = row + (dRow * i);
+              
+              if (this.isInBounds(newCol, newRow)) {
+                possibleMoves.push({ col: newCol, row: newRow });
+              } else {
+                break; // Stop in this direction if out of bounds
+              }
+            }
+          }
+        }
+        break;
+    }
+    
+    return possibleMoves;
+  }
+  
+  // Check if a player can pass the ball
+  canPass(playerId) {
+    const player = this.players.find(p => p.id === playerId);
+    return player && player.hasBall;
+  }
+  
+  // Check if a player can shoot at goal
+  canShoot(playerId) {
+    const player = this.players.find(p => p.id === playerId);
+    if (!player || !player.hasBall) return false;
+    
+    return this.isInShootingRange(player);
+  }
+  
+  // Check if a player is in shooting range
+  isInShootingRange(player) {
+    if (player.team === 'home') {
+      return player.col >= 16; // Within 4 columns of away goal
+    } else {
+      return player.col <= 3; // Within 4 columns of home goal
+    }
+  }
+  
+  // Check if coordinates are within the board boundaries
+  isInBounds(col, row) {
+    return col >= 0 && col < 20 && row >= 0 && row < 10;
+  }
+  
+  // Move a player to a new position
+  movePlayer(playerId, col, row) {
+    const player = this.players.find(p => p.id === playerId);
+    if (!player) return false;
+    
+    // Update player position
+    player.col = col;
+    player.row = row;
+    
+    // If player has the ball, update ball position too
+    if (player.hasBall) {
+      this.ball = { col, row };
+    }
+    
+    // Check for possession changes
+    this.checkPossessionChange(col, row);
+    
+    // Check for fouls
+    this.checkForFouls(col, row);
+    
+    return true;
+  }
+  
+  // Execute a pass between two players
+  executePass(fromPlayerId, toPlayerId) {
+    const fromPlayer = this.players.find(p => p.id === fromPlayerId);
+    const toPlayer = this.players.find(p => p.id === toPlayerId);
+    
+    if (!fromPlayer || !toPlayer || !fromPlayer.hasBall) return false;
+    
+    // Calculate pass interception chance
+    const passDistance = this.calculateDistance(fromPlayer, toPlayer);
+    const interceptionChance = this.calculateInterceptionChance(fromPlayer, toPlayer, passDistance);
+    
+    // Check for interception
+    if (Math.random() < interceptionChance) {
+      // Pass intercepted by an opponent
+      const interceptor = this.findInterceptor(fromPlayer, toPlayer);
+      if (interceptor) {
+        fromPlayer.hasBall = false;
+        interceptor.hasBall = true;
+        this.ball = { col: interceptor.col, row: interceptor.row };
+        
+        // Log the interception
+        this.logEvent({
+          type: 'interception',
+          player: interceptor.name,
+          team: interceptor.team,
+          matchTime: this.matchTime
+        });
+        
+        return {
+          success: false,
+          intercepted: true,
+          interceptor: interceptor.id
+        };
+      }
+    }
+    
+    // Pass succeeded
+    fromPlayer.hasBall = false;
+    toPlayer.hasBall = true;
+    this.ball = { col: toPlayer.col, row: toPlayer.row };
+    
+    // Log the pass
+    this.logEvent({
+      type: 'pass',
+      from: fromPlayer.name,
+      to: toPlayer.name,
+      team: fromPlayer.team,
+      matchTime: this.matchTime
+    });
+    
+    return {
+      success: true,
+      intercepted: false
+    };
+  }
+  
+  // Check for ball possession changes when players are on the same square
+  checkPossessionChange(col, row) {
+    const playersOnSquare = this.playersOnSquare(col, row);
+    if (playersOnSquare.length <= 1) return; // No contest for possession
+    
+    const homeCount = playersOnSquare.filter(p => p.team === 'home').length;
+    const awayCount = playersOnSquare.filter(p => p.team === 'away').length;
+    
+    // Only check for possession change if the ball is on this square
+    if (this.ball.col === col && this.ball.row === row) {
+      // Team with more players gets the ball
+      if (homeCount > awayCount) {
+        // Give ball to a home player
+        const homePlayer = playersOnSquare.find(p => p.team === 'home');
+        if (homePlayer) {
+          this.players.forEach(p => { p.hasBall = false; });
+          homePlayer.hasBall = true;
+          
+          this.logEvent({
+            type: 'possession',
+            team: 'home',
+            player: homePlayer.name,
+            matchTime: this.matchTime
+          });
+        }
+      } else if (awayCount > homeCount) {
+        // Give ball to an away player
+        const awayPlayer = playersOnSquare.find(p => p.team === 'away');
+        if (awayPlayer) {
+          this.players.forEach(p => { p.hasBall = false; });
+          awayPlayer.hasBall = true;
+          
+          this.logEvent({
+            type: 'possession',
+            team: 'away',
+            player: awayPlayer.name,
+            matchTime: this.matchTime
+          });
+        }
+      }
+      // If equal, ball remains where it is but no player has possession
+    }
+  }
+  
+  // Check for fouls when players contest for the ball
+  checkForFouls(col, row) {
+    const playersOnSquare = this.playersOnSquare(col, row);
+    const homeCount = playersOnSquare.filter(p => p.team === 'home').length;
+    const awayCount = playersOnSquare.filter(p => p.team === 'away').length;
+    
+    // Only check for fouls if both teams have players on the square
+    if (homeCount > 0 && awayCount > 0) {
+      const defendingTeam = this.currentTeam === 'home' ? 'away' : 'home';
+      const attackingTeam = this.currentTeam;
+      
+      const defendingCount = defendingTeam === 'home' ? homeCount : awayCount;
+      const attackingCount = attackingTeam === 'home' ? homeCount : awayCount;
+      
+      // Check if the square is in a scoring position
+      const isInScoringPosition = (defendingTeam === 'home' && col < 3) || 
+                                 (defendingTeam === 'away' && col > 16);
+      
+      // Determine foul type based on player count difference
+      if (attackingCount === defendingCount) {
+        // Soft foul
+        if (Math.random() < 0.4) { // 40% chance of a foul
+          if (isInScoringPosition) {
+            // Yellow card in scoring position
+            this.issueYellowCard(attackingTeam);
+          } else {
+            // Warning only
+            this.lastFoul = {
+              type: 'soft',
+              team: attackingTeam,
+              result: 'warning',
+              position: {col, row}
+            };
+            
+            this.logEvent({
+              type: 'foul',
+              foulType: 'soft',
+              team: attackingTeam,
+              result: 'warning',
+              matchTime: this.matchTime
+            });
+          }
+        }
+      } else if (attackingCount === defendingCount + 1) {
+        // Hard foul
+        if (Math.random() < 0.6) { // 60% chance of a foul
+          if (isInScoringPosition) {
+            // Red card in scoring position
+            this.issueRedCard(attackingTeam);
+          } else {
+            // Yellow card
+            this.issueYellowCard(attackingTeam);
+          }
+        }
+      } else if (attackingCount >= defendingCount + 2) {
+        // Injury foul
+        if (Math.random() < 0.8) { // 80% chance of a foul
+          // Red card and injury
+          this.issueRedCard(attackingTeam);
+          this.causeInjury(defendingTeam, col, row);
+        }
+      }
+    }
+  }
+  
+  // Issue a yellow card to a random player from a team
+  issueYellowCard(team) {
+    // Find a random player from the team to issue a yellow card to
+    const eligiblePlayers = this.players.filter(
+      p => p.team === team && !p.hasRedCard && p.onField
+    );
+    
+    if (eligiblePlayers.length > 0) {
+      const randomIndex = Math.floor(Math.random() * eligiblePlayers.length);
+      const player = eligiblePlayers[randomIndex];
+      
+      const cardResult = player.applyCard('yellow');
+      
+      this.lastFoul = {
+        type: cardResult === 'red' ? 'second yellow' : 'yellow card',
+        team,
+        result: cardResult,
+        player: player.name
+      };
+      
+      this.logEvent({
+        type: 'card',
+        cardType: cardResult,
+        player: player.name,
+        team,
+        secondYellow: cardResult === 'red',
+        matchTime: this.matchTime
+      });
+    }
+  }
+  
+  // Issue a red card to a random player from a team
+  issueRedCard(team) {
+    // Find a random player from the team to issue a red card to
+    const eligiblePlayers = this.players.filter(
+      p => p.team === team && !p.hasRedCard && p.onField
+    );
+    
+    if (eligiblePlayers.length > 0) {
+      const randomIndex = Math.floor(Math.random() * eligiblePlayers.length);
+      const player = eligiblePlayers[randomIndex];
+      
+      player.applyCard('red');
+      
+      this.lastFoul = {
+        type: 'red card',
+        team,
+        result: 'red card',
+        player: player.name
+      };
+      
+      this.logEvent({
+        type: 'card',
+        cardType: 'red',
+        player: player.name,
+        team,
+        matchTime: this.matchTime
+      });
+    }
+  }
+  
+  // Cause an injury to a random player from a team on a specific square
+  causeInjury(team, col, row) {
+    // Find a player on the square to injure
+    const playersOnSquare = this.playersOnSquare(col, row)
+      .filter(p => p.team === team && p.onField);
+    
+    if (playersOnSquare.length > 0) {
+      const randomIndex = Math.floor(Math.random() * playersOnSquare.length);
+      const player = playersOnSquare[randomIndex];
+      
+      // Determine injury severity
+      const severityRoll = Math.random();
+      let severity;
+      
+      if (severityRoll < 0.6) {
+        // 60% chance of minor injury
+        severity = 'minor';
+      } else if (severityRoll < 0.9) {
+        // 30% chance of serious injury
+        severity = 'serious';
+      } else {
+        // 10% chance of season-ending injury
+        severity = 'season ending';
+      }
+      
+      // Apply the injury to the player
+      player.applyInjury(severity, this.turnCounter);
+      
+      this.lastInjury = {
+        player: player.name,
+        team,
+        severity
+      };
+      
+      this.logEvent({
+        type: 'injury',
+        player: player.name,
+        team,
+        severity,
+        matchTime: this.matchTime
+      });
+    }
+  }
+  
+  // Attempt a shot at goal
+  shootAtGoal(playerId) {
+    const player = this.players.find(p => p.id === playerId);
+    if (!player || !player.hasBall || !this.isInShootingRange(player)) {
+      return {
+        success: false,
+        reason: 'Not in shooting range or doesn\'t have the ball'
+      };
+    }
+    
+    // Determine which goal to shoot at
+    const targetGoalCol = player.team === 'home' ? 19 : 0;
+    const targetGoalRows = [4, 5, 6]; // The three squares that form the goal
+    
+    // Choose a random target within the goal
+    const targetRow = targetGoalRows[Math.floor(Math.random() * targetGoalRows.length)];
+    
+    // Check for defenders and goalkeeper in the way
+    const defendingTeam = player.team === 'home' ? 'away' : 'home';
+    const defendersInGoal = this.players.filter(p => 
+      p.team === defendingTeam && 
+      p.col === targetGoalCol && 
+      targetGoalRows.includes(p.row) &&
+      p.onField
+    );
+    
+    const goalkeepersInTarget = defendersInGoal.filter(p => p.position === 'GK');
+    const totalDefenders = defendersInGoal.length;
+    
+    // Calculate shot success probability
+    let successProbability = 0.5; // Base 50% chance
+    
+    // Reduce by 15% for each defender
+    successProbability -= totalDefenders * 0.15;
+    
+    // Reduce by 25% if goalkeeper is positioned correctly
+    if (goalkeepersInTarget.some(gk => gk.row === targetRow)) {
+      successProbability -= 0.25;
+    }
+    
+    // Minimum 5% chance to score
+    successProbability = Math.max(0.05, successProbability);
+    
+    // Attempt the shot
+    const shotResult = Math.random() < successProbability;
+    
+    if (shotResult) {
+      // Goal scored!
+      if (player.team === 'home') {
+        this.score.home += 1;
+      } else {
+        this.score.away += 1;
+      }
+      
+      this.lastGoal = {
+        player: player.name,
+        team: player.team,
+        time: this.matchTime
+      };
+      
+      this.logEvent({
+        type: 'goal',
+        player: player.name,
+        team: player.team,
+        matchTime: this.matchTime
+      });
+      
+      // Reset positions for kickoff
+      this.resetToKickoff(defendingTeam); // Defending team will kick off
+      
+      return {
+        success: true,
+        goal: true,
+        scorer: player.name,
+        team: player.team
+      };
+    } else {
+      // Shot saved or missed
+      const goalkeeper = defendersInGoal.find(p => p.position === 'GK');
+      
+      // Log the save/miss
+      this.logEvent({
+        type: 'shot',
+        player: player.name,
+        team: player.team,
+        result: goalkeeper ? 'saved' : 'missed',
+        goalkeeper: goalkeeper ? goalkeeper.name : null,
+        matchTime: this.matchTime
+      });
+      
+      // Give ball to goalkeeper if there is one
+      if (goalkeeper) {
+        this.players.forEach(p => { p.hasBall = false; });
+        goalkeeper.hasBall = true;
+        this.ball = { col: goalkeeper.col, row: goalkeeper.row };
+        
+        return {
+          success: true,
+          goal: false,
+          result: 'saved',
+          goalkeeper: goalkeeper.name
+        };
+      } else {
+        // No goalkeeper (unlikely), place ball in goal area
+        this.ball = { col: targetGoalCol, row: 5 }; // Center of goal
+        // No player has possession
+        this.players.forEach(p => { p.hasBall = false; });
+        
+        return {
+          success: true,
+          goal: false,
+          result: 'missed'
+        };
+      }
+    }
+  }
+  
+  // Reset positions for kickoff after a goal
+  resetToKickoff(kickoffTeam) {
+    // Get kickoff positions based on which team is kicking off
+    const positions = this.generateKickoffPositions(kickoffTeam);
+    
+    // Update player positions
+    this.players.forEach(player => {
+      const position = positions.find(p => 
+        p.team === player.team && p.position === player.position
+      );
+      
+      if (position && player.onField) {
+        player.col = position.col;
+        player.row = position.row;
+        player.hasBall = position.hasBall || false;
+      }
+    });
+    
+    // Update ball position
+    const ballCarrier = this.players.find(p => p.hasBall);
+    if (ballCarrier) {
+      this.ball = { col: ballCarrier.col, row: ballCarrier.row };
+    } else {
+      // Default to center circle
+      this.ball = { col: 10, row: 5 };
+    }
+    
+    // Update current team to kickoff team
+    this.currentTeam = kickoffTeam;
+    this.movesRemaining = 3;
+    
+    // Log kickoff
+    this.logEvent({
+      type: 'kickoff',
+      team: kickoffTeam,
+      matchTime: this.matchTime
+    });
+  }
+  
+  // Generate positions for kickoff
+  generateKickoffPositions(kickoffTeam) {
+    // This would return an array of positions for all players
+    // based on standard football formations
+    
+    // Example 4-4-2 formation kickoff positions
+    const homePositions = [
+      { team: 'home', position: 'GK', col: 1, row: 5 },
+      { team: 'home', position: 'LB', col: 3, row: 2 },
+      { team: 'home', position: 'CB', col: 3, row: 4 },
+      { team: 'home', position: 'CB', col: 3, row: 6 },
+      { team: 'home', position: 'RB', col: 3, row: 8 },
+      { team: 'home', position: 'LM', col: 6, row: 2 },
+      { team: 'home', position: 'CM', col: 6, row: 4 },
+      { team: 'home', position: 'CM', col: 6, row: 6 },
+      { team: 'home', position: 'RM', col: 6, row: 8 },
+      { team: 'home', position: 'ST', col: kickoffTeam === 'home' ? 10 : 9, row: 4 },
+      { team: 'home', position: 'ST', col: kickoffTeam === 'home' ? 9 : 9, row: 6 }
+    ];
+    
+    const awayPositions = [
+      { team: 'away', position: 'GK', col: 18, row: 5 },
+      { team: 'away', position: 'LB', col: 16, row: 2 },
+      { team: 'away', position: 'CB', col: 16, row: 4 },
+      { team: 'away', position: 'CB', col: 16, row: 6 },
+      { team: 'away', position: 'RB', col: 16, row: 8 },
+      { team: 'away', position: 'LM', col: 13, row: 2 },
+      { team: 'away', position: 'CM', col: 13, row: 4 },
+      { team: 'away', position: 'CM', col: 13, row: 6 },
+      { team: 'away', position: 'RM', col: 13, row: 8 },
+      { team: 'away', position: 'ST', col: kickoffTeam === 'away' ? 10 : 11, row: 4 },
+      { team: 'away', position: 'ST', col: kickoffTeam === 'away' ? 9 : 11, row: 6 }
+    ];
+    
+    // Set ball possession for kickoff
+    if (kickoffTeam === 'home') {
+      homePositions.find(p => p.position === 'CM' && p.row === 4).hasBall = true;
+    } else {
+      awayPositions.find(p => p.position === 'CM' && p.row === 4).hasBall = true;
+    }
+    
+    return [...homePositions, ...awayPositions];
+  }
+  
+  // End the current turn
+  endTurn() {
+    // Switch teams
+    this.currentTeam = this.currentTeam === 'home' ? 'away' : 'home';
+    this.movesRemaining = 3;
+    this.turnCounter++;
+    
+    // Update match time (each turn represents approximately 1 minute)
+    if (this.gamePhase === 'play') {
+      this.matchTime++;
+      
+      // Check for half-time at 45 minutes
+      if (this.matchTime === 45) {
+        this.gamePhase = 'half-time';
+        this.logEvent({
+          type: 'phase',
+          phase: 'half-time',
+          matchTime: this.matchTime
+        });
+      }
+      
+      // Check for full-time at 90 minutes
+      if (this.matchTime === 90) {
+        this.gamePhase = 'full-time';
+        this.logEvent({
+          type: 'phase',
+          phase: 'full-time',
+          matchTime: this.matchTime
+        });
+      }
+    }
+    
+    return {
+      currentTeam: this.currentTeam,
+      movesRemaining: this.movesRemaining,
+      turnCounter: this.turnCounter,
+      matchTime: this.matchTime,
+      gamePhase: this.gamePhase
+    };
+  }
+  
+  // Calculate distance between two players
+  calculateDistance(player1, player2) {
+    const colDiff = Math.abs(player1.col - player2.col);
+    const rowDiff = Math.abs(player1.row - player2.row);
+    return Math.sqrt(colDiff * colDiff + rowDiff * rowDiff);
+  }
+  
+  // Calculate the chance of a pass being intercepted
+  calculateInterceptionChance(fromPlayer, toPlayer, distance) {
+    // Base interception chance increases with distance
+    let chance = distance * 0.05; // 5% per square of distance
+    
+    // Check for opponents along the path who might intercept
+    const opponents = this.players.filter(p => 
+      p.team !== fromPlayer.team && 
+      p.onField
+    );
+    
+    for (const opponent of opponents) {
+      // Calculate how close the opponent is to the pass line
+      const distanceToPassLine = this.distanceToLine(
+        opponent, 
+        { col: fromPlayer.col, row: fromPlayer.row },
+        { col: toPlayer.col, row: toPlayer.row }
+      );
+      
+      // Opponents very close to the pass line increase interception chance
+      if (distanceToPassLine < 1.5) {
+        chance += (1.5 - distanceToPassLine) * 0.2; // Up to 30% increase
+      }
+    }
+    
+    // Cap the total chance
+    return Math.min(0.8, chance);
+  }
+  
+  // Find a player who might intercept a pass
+  findInterceptor(fromPlayer, toPlayer) {
+    const opponents = this.players.filter(p => 
+      p.team !== fromPlayer.team && 
+      p.onField
+    );
+    
+    let bestInterceptor = null;
+    let closestDistance = Infinity;
+    
+    for (const opponent of opponents) {
+      // Calculate how close the opponent is to the pass line
+      const distanceToPassLine = this.distanceToLine(
+        opponent, 
+        { col: fromPlayer.col, row: fromPlayer.row },
+        { col: toPlayer.col, row: toPlayer.row }
+      );
+      
+      if (distanceToPassLine < 1.5 && distanceToPassLine < closestDistance) {
+        closestDistance = distanceToPassLine;
+        bestInterceptor = opponent;
+      }
+    }
+    
+    return bestInterceptor;
+  }
+  
+  // Calculate the distance from a point to a line segment (for pass interception)
+  distanceToLine(point, lineStart, lineEnd) {
+    const A = point.col - lineStart.col;
+    const B = point.row - lineStart.row;
+    const C = lineEnd.col - lineStart.col;
+    const D = lineEnd.row - lineStart.row;
+    
+    const dot = A * C + B * D;
+    const lenSq = C * C + D * D;
+    let param = -1;
+    
+    if (lenSq !== 0) param = dot / lenSq;
+    
+    let xx, yy;
+    
+    if (param < 0) {
+      xx = lineStart.col;
+      yy = lineStart.row;
+    } else if (param > 1) {
+      xx = lineEnd.col;
+      yy = lineEnd.row;
+    } else {
+      xx = lineStart.col + param * C;
+      yy = lineStart.row + param * D;
+    }
+    
+    const dx = point.col - xx;
+    const dy = point.row - yy;
+    
+    return Math.sqrt(dx * dx + dy * dy);
+  }
+  
+  // Log an event to the game history
+  logEvent(event) {
+    this.events.push({
+      ...event,
+      turnCounter: this.turnCounter
+    });
+    
+    // Keep only the most recent events (for performance)
+    if (this.events.length > 100) {
+      this.events = this.events.slice(-100);
+    }
+  }
+  
+  // Start a new half after half-time
+  startSecondHalf() {
+    if (this.gamePhase !== 'half-time') return false;
+    
+    // Switch sides for the second half
+    this.players.forEach(player => {
+      // Flip positions horizontally
+      player.col = 19 - player.col;
+    });
+    
+    // Update ball position
+    this.ball.col = 19 - this.ball.col;
+    
+    // Switch to away team for kickoff (if home started the match)
+    const secondHalfKickoffTeam = this.currentTeam === 'home' ? 'away' : 'home';
+    this.resetToKickoff(secondHalfKickoffTeam);
+    
+    this.gamePhase = 'play';
+    
+    // Log second half start
+    this.logEvent({
+      type: 'phase',
+      phase: 'second-half',
+      matchTime: this.matchTime
+    });
+    
+    return true;
+  }
+  
+  // Get a summary of the current match status
+  getMatchSummary() {
+    return {
+      score: this.score,
+      matchTime: this.matchTime,
+      gamePhase: this.gamePhase,
+      turnCounter: this.turnCounter,
+      currentTeam: this.currentTeam,
+      movesRemaining: this.movesRemaining,
+      events: this.events.slice(-10) // Last 10 events
+    };
+  }
+}
+
+// Export the classes for use in applications
+export { Player, GameState };

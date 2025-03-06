@@ -1,0 +1,676 @@
+import React, { useRef, useState, useEffect } from 'react';
+import { Canvas, useFrame, useThree } from '@react-three/fiber';
+import { 
+  OrbitControls, 
+  PerspectiveCamera, 
+  useGLTF, 
+  useTexture, 
+  Text, 
+  Sky 
+} from '@react-three/drei';
+import * as THREE from 'three';
+
+// Constants
+const GRID_WIDTH = 20;
+const GRID_HEIGHT = 10;
+
+// Field component that renders the football pitch
+const Field = () => {
+  // Load textures
+  const grassTexture = useTexture('/textures/grass.jpg');
+  
+  // Configure texture
+  grassTexture.wrapS = grassTexture.wrapT = THREE.RepeatWrapping;
+  grassTexture.repeat.set(8, 4);
+  
+  return (
+    <group>
+      {/* Main pitch */}
+      <mesh 
+        rotation={[-Math.PI / 2, 0, 0]} 
+        position={[GRID_WIDTH / 2 - 0.5, -0.01, GRID_HEIGHT / 2 - 0.5]}
+      >
+        <planeGeometry args={[GRID_WIDTH, GRID_HEIGHT]} />
+        <meshStandardMaterial 
+          map={grassTexture} 
+          roughness={0.8}
+          metalness={0.1}
+        />
+      </mesh>
+      
+      {/* Field markings */}
+      <FieldMarkings />
+      
+      {/* Goals */}
+      <Goal position={[-0.5, 0, GRID_HEIGHT / 2 - 0.5]} rotation={[0, Math.PI / 2, 0]} />
+      <Goal position={[GRID_WIDTH - 0.5, 0, GRID_HEIGHT / 2 - 0.5]} rotation={[0, -Math.PI / 2, 0]} />
+      
+      {/* Grid lines for debug/development */}
+      <GridLines />
+    </group>
+  );
+};
+
+// Field markings (lines)
+const FieldMarkings = () => {
+  return (
+    <group>
+      {/* Outer boundary */}
+      <LineSegment 
+        start={[0, 0]} 
+        end={[GRID_WIDTH - 1, 0]} 
+        color="white" 
+      />
+      <LineSegment 
+        start={[GRID_WIDTH - 1, 0]} 
+        end={[GRID_WIDTH - 1, GRID_HEIGHT - 1]} 
+        color="white" 
+      />
+      <LineSegment 
+        start={[GRID_WIDTH - 1, GRID_HEIGHT - 1]} 
+        end={[0, GRID_HEIGHT - 1]} 
+        color="white" 
+      />
+      <LineSegment 
+        start={[0, GRID_HEIGHT - 1]} 
+        end={[0, 0]} 
+        color="white" 
+      />
+      
+      {/* Center line */}
+      <LineSegment 
+        start={[GRID_WIDTH / 2 - 0.5, 0]} 
+        end={[GRID_WIDTH / 2 - 0.5, GRID_HEIGHT - 1]} 
+        color="white" 
+      />
+      
+      {/* Center circle */}
+      <CenterCircle />
+      
+      {/* Penalty areas */}
+      <PenaltyArea side="home" />
+      <PenaltyArea side="away" />
+    </group>
+  );
+};
+
+// Line segment component for field markings
+const LineSegment = ({ start, end, color = "white", height = 0.01 }) => {
+  const points = [
+    new THREE.Vector3(start[0], height, start[1]),
+    new THREE.Vector3(end[0], height, end[1])
+  ];
+  
+  const lineGeometry = new THREE.BufferGeometry().setFromPoints(points);
+  
+  return (
+    <line geometry={lineGeometry}>
+      <lineBasicMaterial color={color} linewidth={2} />
+    </line>
+  );
+};
+
+// Center circle component
+const CenterCircle = () => {
+  const points = [];
+  const radius = 3;
+  const centerX = GRID_WIDTH / 2 - 0.5;
+  const centerY = GRID_HEIGHT / 2 - 0.5;
+  
+  for (let i = 0; i <= 64; i++) {
+    const angle = (i / 64) * Math.PI * 2;
+    const x = centerX + Math.cos(angle) * radius;
+    const y = centerY + Math.sin(angle) * radius;
+    points.push(new THREE.Vector3(x, 0.01, y));
+  }
+  
+  const circleGeometry = new THREE.BufferGeometry().setFromPoints(points);
+  
+  return (
+    <line geometry={circleGeometry}>
+      <lineBasicMaterial color="white" linewidth={2} />
+    </line>
+  );
+};
+
+// Penalty area component
+const PenaltyArea = ({ side }) => {
+  const homeArea = side === 'home';
+  const startX = homeArea ? 0 : GRID_WIDTH - 4;
+  const areaWidth = 3;
+  const areaHeight = 6;
+  const startY = (GRID_HEIGHT - areaHeight) / 2;
+  
+  return (
+    <group>
+      <LineSegment 
+        start={[startX, startY]} 
+        end={[startX + areaWidth, startY]} 
+        color="white" 
+      />
+      <LineSegment 
+        start={[startX + areaWidth, startY]} 
+        end={[startX + areaWidth, startY + areaHeight]} 
+        color="white" 
+      />
+      <LineSegment 
+        start={[startX + areaWidth, startY + areaHeight]} 
+        end={[startX, startY + areaHeight]} 
+        color="white" 
+      />
+    </group>
+  );
+};
+
+// Grid lines for development
+const GridLines = () => {
+  const gridLines = [];
+  
+  // Vertical lines
+  for (let i = 0; i <= GRID_WIDTH; i++) {
+    gridLines.push(
+      <LineSegment 
+        key={`v-${i}`}
+        start={[i - 0.5, 0]} 
+        end={[i - 0.5, GRID_HEIGHT - 1]} 
+        color="rgba(255,255,255,0.2)" 
+      />
+    );
+  }
+  
+  // Horizontal lines
+  for (let i = 0; i <= GRID_HEIGHT; i++) {
+    gridLines.push(
+      <LineSegment 
+        key={`h-${i}`}
+        start={[0, i - 0.5]} 
+        end={[GRID_WIDTH - 1, i - 0.5]} 
+        color="rgba(255,255,255,0.2)" 
+      />
+    );
+  }
+  
+  // Zone dividers (thicker lines)
+  const zoneDividers = [
+    <LineSegment 
+      key="zone-1"
+      start={[(GRID_WIDTH / 4) - 0.5, 0]} 
+      end={[(GRID_WIDTH / 4) - 0.5, GRID_HEIGHT - 1]} 
+      color="rgba(255,255,255,0.4)" 
+    />,
+    <LineSegment 
+      key="zone-2"
+      start={[(GRID_WIDTH / 2) - 0.5, 0]} 
+      end={[(GRID_WIDTH / 2) - 0.5, GRID_HEIGHT - 1]} 
+      color="rgba(255,255,255,0.4)" 
+    />,
+    <LineSegment 
+      key="zone-3"
+      start={[(GRID_WIDTH * 3/4) - 0.5, 0]} 
+      end={[(GRID_WIDTH * 3/4) - 0.5, GRID_HEIGHT - 1]} 
+      color="rgba(255,255,255,0.4)" 
+    />
+  ];
+  
+  return (
+    <>
+      {gridLines}
+      {zoneDividers}
+    </>
+  );
+};
+
+// Goal component
+const Goal = ({ position, rotation }) => {
+  const width = 3; // 3 grid units
+  const height = 1.5;
+  const depth = 1;
+  
+  return (
+    <group position={position} rotation={rotation}>
+      {/* Goal frame */}
+      <mesh position={[0, height/2, 0]}>
+        <boxGeometry args={[0.1, height, width]} />
+        <meshStandardMaterial color="white" />
+      </mesh>
+      <mesh position={[depth/2, height, 0]}>
+        <boxGeometry args={[depth, 0.1, width]} />
+        <meshStandardMaterial color="white" />
+      </mesh>
+      <mesh position={[depth, height/2, width/2 - 0.05]}>
+        <boxGeometry args={[0.1, height, 0.1]} />
+        <meshStandardMaterial color="white" />
+      </mesh>
+      <mesh position={[depth, height/2, -width/2 + 0.05]}>
+        <boxGeometry args={[0.1, height, 0.1]} />
+        <meshStandardMaterial color="white" />
+      </mesh>
+      
+      {/* Goal net */}
+      <mesh position={[depth/2, height/2, 0]}>
+        <boxGeometry args={[depth, height, width]} />
+        <meshStandardMaterial 
+          color="white" 
+          transparent={true} 
+          opacity={0.1} 
+          wireframe={true} 
+        />
+      </mesh>
+    </group>
+  );
+};
+
+// Player component
+const Player = ({ player, isSelected, onClick, possibleMoves = [] }) => {
+  const { position, team, number, hasBall, redCard, yellowCards, injured, type } = player;
+  const x = player.x;
+  const y = player.y;
+  
+  // Determine player color based on team
+  const baseColor = team === 'home' ? '#FF7043' : '#42A5F5';
+  const materialColor = redCard ? '#bbb' : baseColor;
+  
+  // Determine player scale and opacity based on status
+  const playerScale = redCard ? 0.7 : 1;
+  const playerOpacity = redCard ? 0.3 : injured ? 0.7 : 1;
+  
+  // Reference to the player model for animations
+  const groupRef = useRef();
+  
+  // Floating animation for selected player
+  useFrame(({ clock }) => {
+    if (isSelected && groupRef.current) {
+      groupRef.current.position.y = 0.2 + Math.sin(clock.getElapsedTime() * 3) * 0.1;
+    }
+  });
+  
+  // Handle hover state
+  const [hovered, setHovered] = useState(false);
+  
+  return (
+    <group
+      position={[x, redCard ? -0.5 : 0, y]}
+      ref={groupRef}
+      onClick={(e) => {
+        e.stopPropagation();
+        if (!redCard) onClick(player.id);
+      }}
+      onPointerOver={() => setHovered(true)}
+      onPointerOut={() => setHovered(false)}
+    >
+      {/* Player base/card */}
+      <mesh scale={[0.8 * playerScale, 0.1, 0.8 * playerScale]} position={[0, 0.05, 0]}>
+        <boxGeometry />
+        <meshStandardMaterial 
+          color={materialColor} 
+          transparent={true} 
+          opacity={playerOpacity}
+        />
+      </mesh>
+      
+      {/* Player model - simplified for this example */}
+      <mesh scale={[0.3 * playerScale, 0.8 * playerScale, 0.3 * playerScale]} position={[0, 0.4, 0]}>
+        <capsuleGeometry args={[0.3, 0.8]} />
+        <meshStandardMaterial 
+          color={materialColor} 
+          transparent={true} 
+          opacity={playerOpacity}
+        />
+      </mesh>
+      
+      {/* Player position/number */}
+      <Text
+        position={[0, 0.8, 0]}
+        rotation={[-Math.PI / 2, 0, 0]}
+        fontSize={0.3}
+        color="white"
+        anchorX="center"
+        anchorY="middle"
+      >
+        {position}
+      </Text>
+      
+      <Text
+        position={[0, 0.15, 0]}
+        rotation={[-Math.PI / 2, 0, 0]}
+        fontSize={0.4}
+        color="white"
+        anchorX="center"
+        anchorY="middle"
+      >
+        {number}
+      </Text>
+      
+      {/* Ball indicator */}
+      {hasBall && (
+        <group position={[0.4, 0.2, 0.4]}>
+          <Ball scale={0.3} />
+        </group>
+      )}
+      
+      {/* Yellow card indicator */}
+      {yellowCards > 0 && (
+        <mesh position={[0.5, 0.1, -0.3]} rotation={[0, 0, 0]} scale={[0.2, 0.3, 0.01]}>
+          <boxGeometry />
+          <meshBasicMaterial color="#FFC107" />
+        </mesh>
+      )}
+      
+      {/* Injury indicator */}
+      {injured && (
+        <mesh position={[-0.5, 0.1, -0.3]} scale={0.15}>
+          <sphereGeometry />
+          <meshBasicMaterial color="#F44336" />
+        </mesh>
+      )}
+      
+      {/* Selection indicator */}
+      {isSelected && (
+        <mesh position={[0, 0, 0]} rotation={[-Math.PI / 2, 0, 0]}>
+          <ringGeometry args={[0.6, 0.7, 32]} />
+          <meshBasicMaterial color="#FFD700" transparent opacity={0.7} />
+        </mesh>
+      )}
+      
+      {/* Hover indicator */}
+      {hovered && !isSelected && !redCard && (
+        <mesh position={[0, 0, 0]} rotation={[-Math.PI / 2, 0, 0]}>
+          <ringGeometry args={[0.6, 0.7, 32]} />
+          <meshBasicMaterial color="#FFFFFF" transparent opacity={0.4} />
+        </mesh>
+      )}
+    </group>
+  );
+};
+
+// Ball component
+const Ball = ({ position, scale = 1 }) => {
+  const ballRef = useRef();
+  
+  // Rotate ball continuously
+  useFrame(({ clock }) => {
+    if (ballRef.current) {
+      ballRef.current.rotation.y = clock.getElapsedTime() * 2;
+      ballRef.current.rotation.x = clock.getElapsedTime();
+    }
+  });
+  
+  return (
+    <group position={position} ref={ballRef} scale={scale}>
+      <mesh>
+        <sphereGeometry args={[0.2, 32, 32]} />
+        <meshStandardMaterial color="white" />
+      </mesh>
+      
+      {/* Ball markings */}
+      <mesh>
+        <sphereGeometry args={[0.21, 12, 12]} />
+        <meshStandardMaterial 
+          color="black" 
+          transparent={true} 
+          opacity={0.3}
+          wireframe={true}
+        />
+      </mesh>
+    </group>
+  );
+};
+
+// Possible move indicator
+const PossibleMoveIndicator = ({ position, onClick }) => {
+  const x = position.x;
+  const y = position.y;
+  
+  // Pulse animation
+  const indicatorRef = useRef();
+  
+  useFrame(({ clock }) => {
+    if (indicatorRef.current) {
+      indicatorRef.current.scale.x = 0.3 + Math.sin(clock.getElapsedTime() * 4) * 0.1;
+      indicatorRef.current.scale.y = 0.3 + Math.sin(clock.getElapsedTime() * 4) * 0.1;
+      indicatorRef.current.scale.z = 0.3 + Math.sin(clock.getElapsedTime() * 4) * 0.1;
+    }
+  });
+  
+  return (
+    <mesh 
+      position={[x, 0.05, y]} 
+      ref={indicatorRef}
+      onClick={(e) => {
+        e.stopPropagation();
+        onClick(x, y);
+      }}
+    >
+      <sphereGeometry args={[0.25, 16, 16]} />
+      <meshStandardMaterial 
+        color="#FFEB3B" 
+        transparent 
+        opacity={0.5}
+      />
+    </mesh>
+  );
+};
+
+// Camera controller
+const GameCamera = ({ cameraMode, target, gameState }) => {
+  const { camera } = useThree();
+  
+  useEffect(() => {
+    // Set initial camera position based on mode
+    switch (cameraMode) {
+      case 'topDown':
+        camera.position.set(GRID_WIDTH / 2 - 0.5, 20, GRID_HEIGHT / 2 - 0.5);
+        camera.lookAt(GRID_WIDTH / 2 - 0.5, 0, GRID_HEIGHT / 2 - 0.5);
+        break;
+      case 'side':
+        camera.position.set(-5, 8, GRID_HEIGHT / 2);
+        camera.lookAt(GRID_WIDTH / 2, 0, GRID_HEIGHT / 2);
+        break;
+      case 'corner':
+        camera.position.set(-5, 10, -5);
+        camera.lookAt(GRID_WIDTH / 2, 0, GRID_HEIGHT / 2);
+        break;
+      case 'follow':
+        if (target) {
+          camera.position.set(target.x - 3, 5, target.y + 3);
+          camera.lookAt(target.x, 0, target.y);
+        }
+        break;
+      default:
+        camera.position.set(GRID_WIDTH / 2, 15, GRID_HEIGHT * 1.2);
+        camera.lookAt(GRID_WIDTH / 2, 0, GRID_HEIGHT / 2);
+    }
+  }, [camera, cameraMode, target]);
+  
+  // Follow target if in follow mode
+  useFrame(() => {
+    if (cameraMode === 'follow' && target) {
+      camera.position.x = target.x - 3;
+      camera.position.z = target.y + 3;
+      camera.lookAt(target.x, 0, target.y);
+    }
+  });
+  
+  return null;
+};
+
+// Main 3D game component
+const FootballChess3D = ({ gameState, onPlayerSelect, onMovePlayer, onShoot, onPass, cameraMode = 'default' }) => {
+  // Get selected player
+  const selectedPlayer = gameState.selectedPlayer ? 
+    (gameState.turn === 'home' ? 
+      gameState.players.home.find(p => p.id === gameState.selectedPlayer) : 
+      gameState.players.away.find(p => p.id === gameState.selectedPlayer)
+    ) : null;
+  
+  // Handle mesh click for movement
+  const handleMeshClick = (x, y) => {
+    if (gameState.phase === 'move' && gameState.selectedPlayer) {
+      onMovePlayer(x, y);
+    }
+  };
+  
+  return (
+    <Canvas shadows>
+      {/* Lighting */}
+      <ambientLight intensity={0.5} />
+      <directionalLight 
+        position={[10, 15, 10]} 
+        intensity={1} 
+        castShadow
+        shadow-mapSize-width={2048}
+        shadow-mapSize-height={2048}
+      />
+      
+      {/* Sky */}
+      <Sky sunPosition={[100, 100, 100]} />
+      
+      {/* Camera controls */}
+      <GameCamera 
+        cameraMode={cameraMode} 
+        target={selectedPlayer} 
+        gameState={gameState}
+      />
+      <OrbitControls enabled={cameraMode === 'free'} />
+      
+      {/* Field */}
+      <Field />
+      
+      {/* Possible move indicators */}
+      {gameState.phase === 'move' && 
+       gameState.possibleMoves.map((move, index) => (
+        <PossibleMoveIndicator 
+          key={`move-${index}`}
+          position={move}
+          onClick={handleMeshClick}
+        />
+      ))}
+      
+      {/* Ball (if not held by any player) */}
+      {!gameState.findBallOwner() && (
+        <Ball position={[gameState.ballPosition.x, 0.2, gameState.ballPosition.y]} />
+      )}
+      
+      {/* Players */}
+      {gameState.players.home.map(player => (
+        <Player 
+          key={player.id}
+          player={player}
+          isSelected={gameState.selectedPlayer === player.id}
+          onClick={onPlayerSelect}
+        />
+      ))}
+      
+      {gameState.players.away.map(player => (
+        <Player 
+          key={player.id}
+          player={player}
+          isSelected={gameState.selectedPlayer === player.id}
+          onClick={onPlayerSelect}
+        />
+      ))}
+      
+      {/* Shoot button indicator (when in shooting range) */}
+      {gameState.phase === 'shoot' && (
+        <group position={[gameState.turn === 'home' ? GRID_WIDTH - 1 : 0, 1, GRID_HEIGHT / 2]}>
+          <Text
+            color="red"
+            fontSize={0.8}
+            anchorX="center"
+            anchorY="middle"
+            onClick={onShoot}
+          >
+            SHOOT!
+          </Text>
+          <mesh 
+            position={[0, 0, 0]} 
+            rotation={[0, 0, 0]}
+            onClick={onShoot}
+          >
+            <planeGeometry args={[2, 0.8]} />
+            <meshBasicMaterial color="red" transparent opacity={0.3} />
+          </mesh>
+        </group>
+      )}
+    </Canvas>
+  );
+};
+
+export default FootballChess3D;1, width]} />
+        <meshStandardMaterial color="white" />
+      </mesh>
+      <mesh position={[depth, height/2, width/2 - 0.05]}>
+        <boxGeometry args={[0.1, height, 0.1]} />
+        <meshStandardMaterial color="white" />
+      </mesh>
+      <mesh position={[depth, height/2, -width/2 + 0.05]}>
+        <boxGeometry args={[0.1, height, 0.1]} />
+        <meshStandardMaterial color="white" />
+      </mesh>
+      
+      {/* Goal net */}
+      <mesh position={[depth/2, height/2, 0]}>
+        <boxGeometry args={[depth, height, width]} />
+        <meshStandardMaterial 
+          color="white" 
+          transparent={true} 
+          opacity={0.1} 
+          wireframe={true} 
+        />
+      </mesh>
+    </group>
+  );
+};
+
+// Player component
+const Player = ({ player, isSelected, onClick, possibleMoves = [] }) => {
+  const { position, team, number, hasBall, redCard, yellowCards, injured, type } = player;
+  const x = player.x;
+  const y = player.y;
+  
+  // Determine player color based on team
+  const baseColor = team === 'home' ? '#FF7043' : '#42A5F5';
+  const materialColor = redCard ? '#bbb' : baseColor;
+  
+  // Determine player scale and opacity based on status
+  const playerScale = redCard ? 0.7 : 1;
+  const playerOpacity = redCard ? 0.3 : injured ? 0.7 : 1;
+  
+  // Reference to the player model for animations
+  const groupRef = useRef();
+  
+  // Floating animation for selected player
+  useFrame(({ clock }) => {
+    if (isSelected && groupRef.current) {
+      groupRef.current.position.y = 0.2 + Math.sin(clock.getElapsedTime() * 3) * 0.1;
+    }
+  });
+  
+  // Handle hover state
+  const [hovered, setHovered] = useState(false);
+  
+  return (
+    <group
+      position={[x, redCard ? -0.5 : 0, y]}
+      ref={groupRef}
+      onClick={(e) => {
+        e.stopPropagation();
+        if (!redCard) onClick(player.id);
+      }}
+      onPointerOver={() => setHovered(true)}
+      onPointerOut={() => setHovered(false)}
+    >
+      {/* Player base/card */}
+      <mesh scale={[0.8 * playerScale, 0.1, 0.8 * playerScale]} position={[0, 0.05, 0]}>
+        <boxGeometry />
+        <meshStandardMaterial 
+          color={materialColor} 
+          transparent={true} 
+          opacity={playerOpacity}
+        />
+      </mesh>
+      
+      {/* Player model - simplified for this example */}
+      <mesh scale={[0.3 * playerScale, 0.8 * playerScale, 0.3 * playerScale]} position={[0, 0.4, 0]}>
+        <capsuleGeometry args={[0.3, 0.8]} />
+        <meshSt

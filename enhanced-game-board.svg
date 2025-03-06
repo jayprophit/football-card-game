@@ -1,0 +1,347 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 800 500">
+  <!-- Definitions -->
+  <defs>
+    <!-- Field textures and patterns -->
+    <pattern id="grassTexture" patternUnits="userSpaceOnUse" width="100" height="100">
+      <rect width="100" height="100" fill="#388E3C" />
+      <path d="M0,0 L100,100 M-25,75 L25,125 M75,-25 L125,25" stroke="#2E7D32" stroke-width="1" opacity="0.2" />
+    </pattern>
+    
+    <!-- Lighting effect -->
+    <radialGradient id="fieldLighting" cx="400" cy="250" r="500" gradientUnits="userSpaceOnUse">
+      <stop offset="0%" stop-color="#FFFFFF" stop-opacity="0.1" />
+      <stop offset="100%" stop-color="#000000" stop-opacity="0.2" />
+    </radialGradient>
+    
+    <!-- Highlight effect for squares -->
+    <linearGradient id="squareHighlight" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" stop-color="#FFFFFF" stop-opacity="0.05" />
+      <stop offset="100%" stop-color="#FFFFFF" stop-opacity="0" />
+    </linearGradient>
+    
+    <!-- Goal area gradient -->
+    <linearGradient id="goalAreaGradient" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#9C27B0" stop-opacity="0.4" />
+      <stop offset="100%" stop-color="#7B1FA2" stop-opacity="0.2" />
+    </linearGradient>
+    
+    <!-- Team colors -->
+    <linearGradient id="homeTeamGradient" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#FF7043" />
+      <stop offset="100%" stop-color="#E64A19" />
+    </linearGradient>
+    
+    <linearGradient id="awayTeamGradient" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#42A5F5" />
+      <stop offset="100%" stop-color="#1976D2" />
+    </linearGradient>
+    
+    <!-- Spotlight effect -->
+    <filter id="spotlight" x="-50%" y="-50%" width="200%" height="200%">
+      <feGaussianBlur in="SourceAlpha" stdDeviation="10" result="blur" />
+      <feColorMatrix in="blur" type="matrix" values="1 0 0 0 1  0 1 0 0 1  0 0 1 0 1  0 0 0 20 -8" result="spotlight" />
+      <feComposite in="spotlight" in2="SourceGraphic" operator="in" result="composite" />
+      <feMerge>
+        <feMergeNode in="SourceGraphic" />
+        <feMergeNode in="composite" />
+      </feMerge>
+    </filter>
+    
+    <!-- Glow effects -->
+    <filter id="possibleMoveGlow" x="-50%" y="-50%" width="200%" height="200%">
+      <feGaussianBlur in="SourceAlpha" stdDeviation="5" result="blur" />
+      <feColorMatrix in="blur" type="matrix" values="1 0 0 0 1  0 1 0 0 0.8  0 0 1 0 0  0 0 0 10 -4" result="glow" />
+      <feComposite in="glow" in2="SourceGraphic" operator="out" result="composite" />
+      <feMerge>
+        <feMergeNode in="composite" />
+        <feMergeNode in="SourceGraphic" />
+      </feMerge>
+    </filter>
+    
+    <!-- Card design for players -->
+    <filter id="cardShadow" x="-30%" y="-30%" width="160%" height="160%">
+      <feGaussianBlur in="SourceAlpha" stdDeviation="2" />
+      <feOffset dx="1" dy="2" />
+      <feComponentTransfer>
+        <feFuncA type="linear" slope="0.5" />
+      </feComponentTransfer>
+      <feMerge>
+        <feMergeNode />
+        <feMergeNode in="SourceGraphic" />
+      </feMerge>
+    </filter>
+  </defs>
+  
+  <!-- Field Background with Texture -->
+  <rect width="800" height="500" fill="url(#grassTexture)" />
+  <rect width="800" height="500" fill="url(#fieldLighting)" />
+  
+  <!-- Grid Lines with Enhanced Styling -->
+  <g stroke="#FFFFFF" stroke-width="2" opacity="0.7">
+    <!-- Vertical section dividers with glowing effect -->
+    <line x1="200" y1="0" x2="200" y2="500" stroke-width="3" />
+    <line x1="400" y1="0" x2="400" y2="500" stroke-width="3" />
+    <line x1="600" y1="0" x2="600" y2="500" stroke-width="3" />
+    
+    <!-- Horizontal grid lines - 10 rows -->
+    <line x1="0" y1="50" x2="800" y2="50" />
+    <line x1="0" y1="100" x2="800" y2="100" />
+    <line x1="0" y1="150" x2="800" y2="150" />
+    <line x1="0" y1="200" x2="800" y2="200" />
+    <line x1="0" y1="250" x2="800" y2="250" />
+    <line x1="0" y1="300" x2="800" y2="300" />
+    <line x1="0" y1="350" x2="800" y2="350" />
+    <line x1="0" y1="400" x2="800" y2="400" />
+    <line x1="0" y1="450" x2="800" y2="450" />
+    
+    <!-- Vertical grid lines - inside each section -->
+    <line x1="40" y1="0" x2="40" y2="500" />
+    <line x1="80" y1="0" x2="80" y2="500" />
+    <line x1="120" y1="0" x2="120" y2="500" />
+    <line x1="160" y1="0" x2="160" y2="500" />
+    
+    <line x1="240" y1="0" x2="240" y2="500" />
+    <line x1="280" y1="0" x2="280" y2="500" />
+    <line x1="320" y1="0" x2="320" y2="500" />
+    <line x1="360" y1="0" x2="360" y2="500" />
+    
+    <line x1="440" y1="0" x2="440" y2="500" />
+    <line x1="480" y1="0" x2="480" y2="500" />
+    <line x1="520" y1="0" x2="520" y2="500" />
+    <line x1="560" y1="0" x2="560" y2="500" />
+    
+    <line x1="640" y1="0" x2="640" y2="500" />
+    <line x1="680" y1="0" x2="680" y2="500" />
+    <line x1="720" y1="0" x2="720" y2="500" />
+    <line x1="760" y1="0" x2="760" y2="500" />
+  </g>
+  
+  <!-- Center Circle with enhanced styling -->
+  <circle cx="400" cy="250" r="70" fill="none" stroke="#FFFFFF" stroke-width="3" opacity="0.8" />
+  <circle cx="400" cy="250" r="8" fill="#FFFFFF" opacity="0.9" />
+  <circle cx="400" cy="250" r="72" fill="none" stroke="#FFFFFF" stroke-width="1" opacity="0.3" />
+  
+  <!-- Goal Areas with Premium Visual Effects -->
+  <!-- Left Goal (3 squares) -->
+  <rect x="0" y="200" width="40" height="50" fill="url(#goalAreaGradient)" />
+  <rect x="0" y="250" width="40" height="50" fill="url(#goalAreaGradient)" />
+  <rect x="0" y="300" width="40" height="50" fill="url(#goalAreaGradient)" />
+  
+  <!-- Right Goal (3 squares) -->
+  <rect x="760" y="200" width="40" height="50" fill="url(#goalAreaGradient)" />
+  <rect x="760" y="250" width="40" height="50" fill="url(#goalAreaGradient)" />
+  <rect x="760" y="300" width="40" height="50" fill="url(#goalAreaGradient)" />
+  
+  <!-- Penalty Areas with Premium Styling -->
+  <rect x="0" y="150" width="120" height="200" fill="none" stroke="#FFFFFF" stroke-width="3" opacity="0.7" rx="5" />
+  <rect x="680" y="150" width="120" height="200" fill="none" stroke="#FFFFFF" stroke-width="3" opacity="0.7" rx="5" />
+  
+  <!-- Goalkeeper (Team 1) with Card Design -->
+  <g transform="translate(20, 250)" filter="url(#cardShadow)">
+    <rect width="35" height="45" rx="5" fill="url(#homeTeamGradient)" />
+    <rect width="35" height="10" rx="5 5 0 0" fill="#FFD54F" />
+    <text x="17.5" y="8" font-family="Arial" font-size="8" text-anchor="middle" fill="black" font-weight="bold">87</text>
+    <text x="17.5" y="30" font-family="Arial" font-size="14" text-anchor="middle" fill="white" font-weight="bold">GK</text>
+    <circle cx="17.5" cy="40" r="5" fill="#FFD54F" />
+    <text x="17.5" y="42" font-family="Arial" font-size="6" text-anchor="middle" fill="black" font-weight="bold">1</text>
+  </g>
+  
+  <!-- Striker (Team 2) with Card Design -->
+  <g transform="translate(745, 250)" filter="url(#cardShadow)">
+    <rect width="35" height="45" rx="5" fill="url(#awayTeamGradient)" />
+    <rect width="35" height="10" rx="5 5 0 0" fill="#FFD54F" />
+    <text x="17.5" y="8" font-family="Arial" font-size="8" text-anchor="middle" fill="black" font-weight="bold">91</text>
+    <text x="17.5" y="30" font-family="Arial" font-size="14" text-anchor="middle" fill="white" font-weight="bold">ST</text>
+    <circle cx="17.5" cy="40" r="5" fill="#FFD54F" />
+    <text x="17.5" y="42" font-family="Arial" font-size="6" text-anchor="middle" fill="black" font-weight="bold">9</text>
+  </g>
+  
+  <!-- Sample Midfielder (Team 1) with movement pattern visualization -->
+  <g transform="translate(280, 300)">
+    <rect width="35" height="45" rx="5" fill="url(#homeTeamGradient)" filter="url(#cardShadow)" />
+    <rect width="35" height="10" rx="5 5 0 0" fill="#FFD54F" />
+    <text x="17.5" y="8" font-family="Arial" font-size="8" text-anchor="middle" fill="black" font-weight="bold">85</text>
+    <text x="17.5" y="30" font-family="Arial" font-size="14" text-anchor="middle" fill="white" font-weight="bold">CM</text>
+    <circle cx="17.5" cy="40" r="5" fill="#FFD54F" />
+    <text x="17.5" y="42" font-family="Arial" font-size="6" text-anchor="middle" fill="black" font-weight="bold">8</text>
+    
+    <!-- Highlight for selected player -->
+    <rect width="35" height="45" rx="5" stroke="#FFD54F" stroke-width="2" fill="none" />
+    
+    <!-- Movement pattern indicators (Queen-like movement, limited to 2 squares) with glowing effect -->
+    <circle cx="17.5" cy="-10" r="5" fill="#FFEB3B" opacity="0.7" filter="url(#possibleMoveGlow)" />
+    <circle cx="57.5" cy="-10" r="5" fill="#FFEB3B" opacity="0.7" filter="url(#possibleMoveGlow)" />
+    <circle cx="-22.5" cy="-10" r="5" fill="#FFEB3B" opacity="0.7" filter="url(#possibleMoveGlow)" />
+    <circle cx="17.5" cy="65" r="5" fill="#FFEB3B" opacity="0.7" filter="url(#possibleMoveGlow)" />
+    <circle cx="57.5" cy="65" r="5" fill="#FFEB3B" opacity="0.7" filter="url(#possibleMoveGlow)" />
+    <circle cx="-22.5" cy="65" r="5" fill="#FFEB3B" opacity="0.7" filter="url(#possibleMoveGlow)" />
+    <circle cx="-22.5" cy="22.5" r="5" fill="#FFEB3B" opacity="0.7" filter="url(#possibleMoveGlow)" />
+    <circle cx="57.5" cy="22.5" r="5" fill="#FFEB3B" opacity="0.7" filter="url(#possibleMoveGlow)" />
+  </g>
+  
+  <!-- Sample Winger (Team 2) with movement pattern visualization -->
+  <g transform="translate(520, 200)">
+    <rect width="35" height="45" rx="5" fill="url(#awayTeamGradient)" filter="url(#cardShadow)" />
+    <rect width="35" height="10" rx="5 5 0 0" fill="#FFD54F" />
+    <text x="17.5" y="8" font-family="Arial" font-size="8" text-anchor="middle" fill="black" font-weight="bold">84</text>
+    <text x="17.5" y="30" font-family="Arial" font-size="14" text-anchor="middle" fill="white" font-weight="bold">RW</text>
+    <circle cx="17.5" cy="40" r="5" fill="#FFD54F" />
+    <text x="17.5" y="42" font-family="Arial" font-size="6" text-anchor="middle" fill="black" font-weight="bold">7</text>
+    
+    <!-- Movement pattern indicators (Knight-like plus horizontal) with interactive highlight -->
+    <circle cx="-22.5" cy="-50" r="4" fill="#64B5F6" opacity="0.7" />
+    <circle cx="57.5" cy="-50" r="4" fill="#64B5F6" opacity="0.7" />
+    <circle cx="-47.5" cy="-10" r="4" fill="#64B5F6" opacity="0.7" />
+    <circle cx="82.5" cy="-10" r="4" fill="#64B5F6" opacity="0.7" />
+    <circle cx="-47.5" cy="55" r="4" fill="#64B5F6" opacity="0.7" />
+    <circle cx="82.5" cy="55" r="4" fill="#64B5F6" opacity="0.7" />
+    <circle cx="-22.5" cy="95" r="4" fill="#64B5F6" opacity="0.7" />
+    <circle cx="57.5" cy="95" r="4" fill="#64B5F6" opacity="0.7" />
+    <circle cx="-22.5" cy="22.5" r="4" fill="#64B5F6" opacity="0.7" />
+    <circle cx="57.5" cy="22.5" r="4" fill="#64B5F6" opacity="0.7" />
+  </g>
+  
+  <!-- Football (Ball) with Enhanced Design -->
+  <g transform="translate(400, 250)">
+    <circle r="10" fill="white" stroke="black" stroke-width="1" />
+    <circle r="9" fill="white" stroke="#E0E0E0" stroke-width="0.5" />
+    <path d="M0,-8 L5,0 L0,8 L-5,0 Z" fill="#303030" opacity="0.8" />
+    <path d="M-5,0 L0,-3 L5,0 L0,3 Z" fill="#303030" opacity="0.8" />
+    <!-- Highlight effect -->
+    <circle r="10" fill="none" stroke="white" stroke-width="2" opacity="0.3" />
+    <circle r="3" fill="white" opacity="0.5" />
+  </g>
+  
+  <!-- Field Zone Labels with Modern UI -->
+  <g transform="translate(0, 20)">
+    <rect x="50" y="-20" width="100" height="25" rx="12.5" fill="rgba(0,0,0,0.5)" />
+    <text x="100" y="0" font-family="Arial" font-size="14" fill="white" text-anchor="middle" font-weight="bold">DEFENSIVE ZONE</text>
+    
+    <rect x="250" y="-20" width="100" height="25" rx="12.5" fill="rgba(0,0,0,0.5)" />
+    <text x="300" y="0" font-family="Arial" font-size="14" fill="white" text-anchor="middle" font-weight="bold">MIDFIELD (DEF)</text>
+    
+    <rect x="450" y="-20" width="100" height="25" rx="12.5" fill="rgba(0,0,0,0.5)" />
+    <text x="500" y="0" font-family="Arial" font-size="14" fill="white" text-anchor="middle" font-weight="bold">MIDFIELD (ATT)</text>
+    
+    <rect x="650" y="-20" width="100" height="25" rx="12.5" fill="rgba(0,0,0,0.5)" />
+    <text x="700" y="0" font-family="Arial" font-size="14" fill="white" text-anchor="middle" font-weight="bold">ATTACKING ZONE</text>
+  </g>
+  
+  <!-- Score Display -->
+  <g transform="translate(400, 15)">
+    <rect x="-100" y="-15" width="200" height="30" rx="15" fill="rgba(0,0,0,0.7)" />
+    <text x="-50" y="5" font-family="Arial" font-size="18" fill="#FF7043" text-anchor="middle" font-weight="bold">2</text>
+    <text x="0" y="5" font-family="Arial" font-size="18" fill="white" text-anchor="middle" font-weight="bold">-</text>
+    <text x="50" y="5" font-family="Arial" font-size="18" fill="#42A5F5" text-anchor="middle" font-weight="bold">1</text>
+    <text x="0" y="21" font-family="Arial" font-size="10" fill="white" text-anchor="middle">75'</text>
+  </g>
+  
+  <!-- Turn Indicator -->
+  <g transform="translate(750, 480)">
+    <rect x="-80" y="-20" width="80" height="25" rx="12.5" fill="url(#homeTeamGradient)" />
+    <text x="-40" y="0" font-family="Arial" font-size="14" fill="white" text-anchor="middle" font-weight="bold">HOME TURN</text>
+  </g>
+  
+  <!-- Moves Indicator -->
+  <g transform="translate(50, 480)">
+    <rect x="0" y="-20" width="80" height="25" rx="12.5" fill="rgba(0,0,0,0.7)" />
+    <text x="40" y="0" font-family="Arial" font-size="14" fill="white" text-anchor="middle" font-weight="bold">MOVES: 2</text>
+  </g>
+  
+  <!-- Cards & Statistics Display -->
+  <g transform="translate(15, 50)">
+    <!-- Yellow Card Indicator -->
+    <rect width="15" height="20" fill="#FFC107" rx="2" />
+    <text x="7.5" y="15" font-family="Arial" font-size="12" text-anchor="middle" fill="#000" font-weight="bold">1</text>
+    
+    <!-- Red Card Indicator -->
+    <rect y="25" width="15" height="20" fill="#F44336" rx="2" />
+    <text x="7.5" y="40" font-family="Arial" font-size="12" text-anchor="middle" fill="#FFF" font-weight="bold">0</text>
+  </g>
+  
+  <g transform="translate(785, 50)">
+    <!-- Yellow Card Indicator -->
+    <rect x="-15" width="15" height="20" fill="#FFC107" rx="2" />
+    <text x="-7.5" y="15" font-family="Arial" font-size="12" text-anchor="middle" fill="#000" font-weight="bold">2</text>
+    
+    <!-- Red Card Indicator -->
+    <rect x="-15" y="25" width="15" height="20" fill="#F44336" rx="2" />
+    <text x="-7.5" y="40" font-family="Arial" font-size="12" text-anchor="middle" fill="#FFF" font-weight="bold">1</text>
+  </g>
+  
+  <!-- Example Active Ability Effect -->
+  <g transform="translate(280, 300)">
+    <!-- Pulsing circle effect around the selected player -->
+    <circle cx="17.5" cy="22.5" r="30" fill="none" stroke="#FFD54F" stroke-width="2" opacity="0.7">
+      <animate attributeName="r" values="30;35;30" dur="2s" repeatCount="indefinite" />
+      <animate attributeName="opacity" values="0.7;0.3;0.7" dur="2s" repeatCount="indefinite" />
+    </circle>
+  </g>
+  
+  <!-- Example Injury Indicator -->
+  <g transform="translate(520, 350)">
+    <rect width="35" height="45" rx="5" fill="url(#awayTeamGradient)" filter="url(#cardShadow)" />
+    <rect width="35" height="10" rx="5 5 0 0" fill="#FFD54F" />
+    <text x="17.5" y="8" font-family="Arial" font-size="8" text-anchor="middle" fill="black" font-weight="bold">82</text>
+    <text x="17.5" y="30" font-family="Arial" font-size="14" text-anchor="middle" fill="white" font-weight="bold">CB</text>
+    <circle cx="17.5" cy="40" r="5" fill="#FFD54F" />
+    <text x="17.5" y="42" font-family="Arial" font-size="6" text-anchor="middle" fill="black" font-weight="bold">4</text>
+    
+    <!-- Injury icon -->
+    <circle cx="30" cy="10" r="6" fill="#F44336" />
+    <text x="30" y="13" font-family="Arial" font-size="8" text-anchor="middle" fill="white" font-weight="bold">!</text>
+  </g>
+  
+  <!-- Example of Highlighted Possible Pass Path -->
+  <path d="M297.5, 322.5 L400, 250" stroke="#64B5F6" stroke-width="2" stroke-dasharray="5,3" opacity="0.8" marker-end="url(#arrowhead)" />
+  <defs>
+    <marker id="arrowhead" markerWidth="10" markerHeight="7" refX="0" refY="3.5" orient="auto">
+      <polygon points="0 0, 10 3.5, 0 7" fill="#64B5F6" />
+    </marker>
+  </defs>
+  
+  <!-- Example of Last Action Notification -->
+  <g transform="translate(400, 470)">
+    <rect x="-150" y="-20" width="300" height="25" rx="12.5" fill="rgba(0,0,0,0.7)" />
+    <text x="0" y="0" font-family="Arial" font-size="14" fill="#FFD54F" text-anchor="middle" font-weight="bold">SUCCESSFUL PASS: DE BRUYNE → FODEN</text>
+  </g>
+  
+  <!-- Example of Square Highlight for Potential Shot -->
+  <rect x="760" y="250" width="40" height="50" stroke="#F44336" stroke-width="3" fill="none" rx="5">
+    <animate attributeName="stroke-opacity" values="1;0.5;1" dur="1.5s" repeatCount="indefinite" />
+  </rect>
+  
+  <!-- Team Badge Icons -->
+  <g transform="translate(50, 15)">
+    <circle r="15" fill="#FFFFFF" />
+    <circle r="13" fill="#7B1FA2" />
+    <text x="0" y="5" font-family="Arial" font-size="12" text-anchor="middle" fill="white" font-weight="bold">MCI</text>
+  </g>
+  
+  <g transform="translate(750, 15)">
+    <circle r="15" fill="#FFFFFF" />
+    <circle r="13" fill="#1A237E" />
+    <text x="0" y="5" font-family="Arial" font-size="12" text-anchor="middle" fill="white" font-weight="bold">RMA</text>
+  </g>
+  
+  <!-- Match Event Icons (example) -->
+  <g transform="translate(10, 430)">
+    <!-- Goal event -->
+    <circle r="10" fill="#4CAF50" />
+    <text x="0" y="4" font-family="Arial" font-size="12" text-anchor="middle" fill="white" font-weight="bold">G</text>
+    <text x="15" y="4" font-family="Arial" font-size="10" fill="white" text-anchor="start">12'</text>
+  </g>
+  
+  <g transform="translate(10, 455)">
+    <!-- Yellow card event -->
+    <rect x="-8" y="-8" width="16" height="16" fill="#FFC107" rx="2" />
+    <text x="15" y="4" font-family="Arial" font-size="10" fill="white" text-anchor="start">37'</text>
+  </g>
+  
+  <!-- Field Areas Labels -->
+  <rect x="5" y="225" width="35" height="50" rx="5" fill="rgba(255,255,255,0.1)" />
+  <text x="22.5" y="255" font-family="Arial" font-size="14" text-anchor="middle" fill="white" font-weight="bold" transform="rotate(-90, 22.5, 255)">GOAL</text>
+  
+  <rect x="760" y="225" width="35" height="50" rx="5" fill="rgba(255,255,255,0.1)" />
+  <text x="777.5" y="255" font-family="Arial" font-size="14" text-anchor="middle" fill="white" font-weight="bold" transform="rotate(90, 777.5, 255)">GOAL</text>
+</svg>

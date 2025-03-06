@@ -1,0 +1,3258 @@
+      // Summer (Jul-Sep)
+      season = {
+        id: `summer_${year}`,
+        name: `Summer ${year}`,
+        theme: "Summer Glory",
+        startDate: new Date(year, 6, 1),
+        endDate: new Date(year, 9, 0)
+      };
+      nextSeasonStart = new Date(year, 9, 1);
+    } else {
+      // Fall (Oct-Dec)
+      season = {
+        id: `fall_${year}`,
+        name: `Fall ${year}`,
+        theme: "Autumn League",
+        startDate: new Date(year, 9, 1),
+        endDate: new Date(year, 12, 0)
+      };
+      nextSeasonStart = new Date(year + 1, 0, 1);
+    }
+    
+    // Find relevant season reward
+    const seasonReward = this.rewardSchedules.seasonal.rewards.find(
+      r => r.id.startsWith(season.id.split('_')[0])
+    );
+    
+    // Calculate days remaining
+    const daysRemaining = Math.ceil((season.endDate - now) / (1000 * 60 * 60 * 24));
+    
+    return {
+      current: season,
+      nextStart: nextSeasonStart,
+      daysRemaining,
+      rewards: seasonReward
+    };
+  }
+  
+  /**
+   * Get user's progress in the current season
+   */
+  async getSeasonProgress(username) {
+    const user = this.userAccountSystem.getUser(username);
+    if (!user) throw new Error("User not found");
+    
+    const currentSeason = this.getCurrentSeason();
+    
+    // Initialize seasonal progress if not exists
+    user.seasonalProgress = user.seasonalProgress || {};
+    
+    // Initialize current season if not tracked
+    if (!user.seasonalProgress[currentSeason.current.id]) {
+      user.seasonalProgress[currentSeason.current.id] = {
+        startedAt: new Date(),
+        level: 1,
+        xp: 0,
+        rewards: [],
+        challenges: {
+          active: this.rewardSchedules.seasonal.challenges.map(c => ({
+            ...c,
+            progress: 0,
+            completed: false
+          })),
+          completed: []
+        }
+      };
+      
+      // Save user updates
+      this.userAccountSystem.updateUser(user);
+    }
+    
+    const seasonProgress = user.seasonalProgress[currentSeason.current.id];
+    
+    return {
+      season: currentSeason.current,
+      progress: seasonProgress,
+      nextLevelXP: this.getSeasonalLevelXP(seasonProgress.level)
+    };
+  }
+  
+  /**
+   * Get XP required for next seasonal level
+   */
+  getSeasonalLevelXP(currentLevel) {
+    // Season levels go from 1 to 100, with increasing XP requirements
+    const baseXP = 100;
+    const multiplier = 1.1;
+    
+    return Math.floor(baseXP * Math.pow(multiplier, currentLevel - 1));
+  }
+  
+  /**
+   * Award season XP to user and process level ups
+   */
+  async awardSeasonXP(username, xp, reason) {
+    const user = this.userAccountSystem.getUser(username);
+    if (!user) throw new Error("User not found");
+    
+    const currentSeason = this.getCurrentSeason();
+    
+    // Make sure seasonal progress is initialized
+    await this.getSeasonProgress(username);
+    
+    const seasonProgress = user.seasonalProgress[currentSeason.current.id];
+    
+    // Add XP
+    seasonProgress.xp += xp;
+    
+    // Check for level up
+    let levelsGained = 0;
+    let totalTokens = 0;
+    
+    while (true) {
+      const nextLevelXP = this.getSeasonalLevelXP(seasonProgress.level);
+      
+      if (seasonProgress.xp >= nextLevelXP && seasonProgress.level < 100) {
+        // Level up!
+        seasonProgress.level += 1;
+        seasonProgress.xp -= nextLevelXP;
+        levelsGained += 1;
+        
+        // Award tokens for level up
+        const tokensForLevel = 10 * seasonProgress.level;
+        totalTokens += tokensForLevel;
+        
+        // Track level milestone rewards
+        if (seasonProgress.level % 10 === 0) {
+          // Special milestone rewards every 10 levels
+          const milestone = {
+            level: seasonProgress.level,
+            reward: {
+              tokens: seasonProgress.level * 5,
+              item: `Season ${currentSeason.current.theme} Level ${seasonProgress.level} Reward`
+            },
+            claimed: false
+          };
+          
+          seasonProgress.rewards.push(milestone);
+        }
+      } else {
+        break;
+      }
+    }
+    
+    // Award tokens for levels gained
+    if (totalTokens > 0) {
+      user.points = user.points || 0;
+      user.points += totalTokens;
+      
+      // Award blockchain tokens if applicable
+      if (user.isKycVerified && user.walletAddress) {
+        try {
+          await this.blockchainManager.awardTokens(
+            user.walletAddress,
+            totalTokens,
+            `Seasonal Level Up: ${levelsGained} levels in ${currentSeason.current.name}`
+          );
+        } catch (error) {
+          console.error("Failed to award blockchain tokens for seasonal level up:", error);
+        }
+      } else if (user.age < 18) {
+        // For underage users, store rewards to be claimed later
+        user.pendingBlockchainRewards = user.pendingBlockchainRewards || [];
+        user.pendingBlockchainRewards.push({
+          amount: totalTokens,
+          reason: `Seasonal Level Up: ${levelsGained} levels in ${currentSeason.current.name}`,
+          timestamp: new Date()
+        });
+      }
+    }
+    
+    // Save user updates
+    this.userAccountSystem.updateUser(user);
+    
+    return {
+      xpAwarded: xp,
+      reason,
+      newLevel: seasonProgress.level,
+      levelsGained,
+      tokensAwarded: totalTokens,
+      remainingXP: seasonProgress.xp,
+      nextLevelXP: this.getSeasonalLevelXP(seasonProgress.level)
+    };
+  }
+  
+  /**
+   * Claim a seasonal level milestone reward
+   */
+  async claimSeasonMilestone(username, level) {
+    const user = this.userAccountSystem.getUser(username);
+    if (!user) throw new Error("User not found");
+    
+    const currentSeason = this.getCurrentSeason();
+    
+    // Make sure seasonal progress is initialized
+    await this.getSeasonProgress(username);
+    
+    const seasonProgress = user.seasonalProgress[currentSeason.current.id];
+    
+    // Find the milestone
+    const milestone = seasonProgress.rewards.find(r => r.level === level && !r.claimed);
+    
+    if (!milestone) {
+      throw new Error("Milestone not found or already claimed");
+    }
+    
+    // Mark as claimed
+    milestone.claimed = true;
+    milestone.claimedAt = new Date();
+    
+    // Award tokens
+    user.points = user.points || 0;
+    user.points += milestone.reward.tokens;
+    
+    // Award blockchain tokens and NFT if applicable
+    if (user.isKycVerified && user.walletAddress) {
+      try {
+        await this.blockchainManager.awardTokens(
+          user.walletAddress,
+          milestone.reward.tokens,
+          `Season Milestone: Level ${level} in ${currentSeason.current.name}`
+        );
+        
+        // Mint milestone NFT for significant levels (20, 50, 100)
+        if (level === 20 || level === 50 || level === 100) {
+          const rarity = level === 100 ? "Legendary" : level === 50 ? "Epic" : "Rare";
+          
+          const metadata = {
+            name: `${currentSeason.current.name} Level ${level} Trophy`,
+            description: `Special NFT awarded for reaching level ${level} in the ${currentSeason.current.name} season.`,
+            image: `https://footballchess.com/seasons/${currentSeason.current.id}/level${level}.png`,
+            attributes: [
+              { trait_type: "Season", value: currentSeason.current.name },
+              { trait_type: "Level", value: level },
+              { trait_type: "Rarity", value: rarity }
+            ]
+          };
+          
+          await this.blockchainManager.mintBadgeNFT(
+            user.walletAddress,
+            `season_${currentSeason.current.id}_level${level}`,
+            metadata
+          );
+        }
+      } catch (error) {
+        console.error("Failed to award blockchain tokens/NFT for seasonal milestone:", error);
+      }
+    } else if (user.age < 18) {
+      // For underage users, store rewards to be claimed later
+      user.pendingBlockchainRewards = user.pendingBlockchainRewards || [];
+      user.pendingBlockchainRewards.push({
+        amount: milestone.reward.tokens,
+        reason: `Season Milestone: Level ${level} in ${currentSeason.current.name}`,
+        timestamp: new Date(),
+        nft: (level === 20 || level === 50 || level === 100) ? {
+          name: `${currentSeason.current.name} Level ${level} Trophy`,
+          description: `Special NFT awarded for reaching level ${level} in the ${currentSeason.current.name} season.`,
+          image: `https://footballchess.com/seasons/${currentSeason.current.id}/level${level}.png`,
+          type: "seasonal_milestone"
+        } : null
+      });
+    }
+    
+    // Save user updates
+    this.userAccountSystem.updateUser(user);
+    
+    return {
+      claimed: true,
+      milestone: {
+        level,
+        reward: milestone.reward
+      }
+    };
+  }
+  
+  /**
+   * Complete a season and award final rewards
+   */
+  async completeSeason(username, seasonId) {
+    const user = this.userAccountSystem.getUser(username);
+    if (!user) throw new Error("User not found");
+    
+    // Check if season exists in user's progress
+    if (!user.seasonalProgress || !user.seasonalProgress[seasonId]) {
+      throw new Error("Season progress not found");
+    }
+    
+    const seasonProgress = user.seasonalProgress[seasonId];
+    
+    // Check if season is already completed
+    if (seasonProgress.completed) {
+      return { status: 'already_completed' };
+    }
+    
+    // Find season info
+    const seasonType = seasonId.split('_')[0]; // winter, spring, summer, fall
+    
+    // Find season reward
+    const seasonReward = this.rewardSchedules.seasonal.rewards.find(
+      r => r.id === seasonType + "_season"
+    );
+    
+    if (!seasonReward) {
+      throw new Error("Season reward not found");
+    }
+    
+    // Mark season as completed
+    seasonProgress.completed = true;
+    seasonProgress.completedAt = new Date();
+    
+    // Award tokens and XP
+    user.points = user.points || 0;
+    user.points += seasonReward.tokens;
+    
+    user.xp = user.xp || 0;
+    user.xp += seasonReward.xp;
+    
+    // Check for level up
+    this.achievementSystem.checkAndUpdateUserLevel(user);
+    
+    // Track achievement
+    await this.achievementSystem.trackAchievement(username, "SEASON_COMPLETE", 1);
+    
+    // Award blockchain tokens and NFT if applicable
+    if (user.isKycVerified && user.walletAddress) {
+      try {
+        await this.blockchainManager.awardTokens(
+          user.walletAddress,
+          seasonReward.tokens,
+          `Season Completion: ${seasonId}`
+        );
+        
+        if (seasonReward.nft) {
+          // Mint season completion NFT
+          const metadata = {
+            name: `${seasonType.charAt(0).toUpperCase() + seasonType.slice(1)} Season Completion Trophy`,
+            description: `Special NFT awarded for completing the ${seasonType} season.`,
+            image: `https://footballchess.com/seasons/${seasonType}_completion.png`,
+            attributes: [
+              { trait_type: "Season", value: seasonId },
+              { trait_type: "Level Reached", value: seasonProgress.level },
+              { trait_type: "Rarity", value: "Epic" }
+            ]
+          };
+          
+          await this.blockchainManager.mintBadgeNFT(
+            user.walletAddress,
+            `season_completion_${seasonId}`,
+            metadata
+          );
+        }
+      } catch (error) {
+        console.error("Failed to award blockchain tokens/NFT for season completion:", error);
+      }
+    } else if (user.age < 18) {
+      // For underage users, store rewards to be claimed later
+      user.pendingBlockchainRewards = user.pendingBlockchainRewards || [];
+      user.pendingBlockchainRewards.push({
+        amount: seasonReward.tokens,
+        reason: `Season Completion: ${seasonId}`,
+        timestamp: new Date(),
+        nft: seasonReward.nft ? {
+          name: `${seasonType.charAt(0).toUpperCase() + seasonType.slice(1)} Season Completion Trophy`,
+          description: `Special NFT awarded for completing the ${seasonType} season.`,
+          image: `https://footballchess.com/seasons/${seasonType}_completion.png`,
+          type: "season_completion"
+        } : null
+      });
+    }
+    
+    // Save user updates
+    this.userAccountSystem.updateUser(user);
+    
+    return {
+      completed: true,
+      season: seasonId,
+      levelReached: seasonProgress.level,
+      rewards: {
+        tokens: seasonReward.tokens,
+        xp: seasonReward.xp,
+        exclusiveItems: seasonReward.exclusive_items
+      }
+    };
+  }
+}
+
+/**
+ * Unlockables System
+ * Manages cosmetic items, special abilities, and game modes that can be unlocked
+ */
+class UnlockablesSystem {
+  constructor(userAccountSystem, blockchainManager) {
+    this.userAccountSystem = userAccountSystem;
+    this.blockchainManager = blockchainManager;
+    
+    // Define unlockable items
+    this.unlockables = {
+      kits: [
+        { id: "basic_home", name: "Basic Home Kit", cost: 0, rarity: "Common", type: "kit", unlocked_by_default: true },
+        { id: "basic_away", name: "Basic Away Kit", cost: 0, rarity: "Common", type: "kit", unlocked_by_default: true },
+        { id: "club_home", name: "Club Home Kit", cost: 100, rarity: "Uncommon", type: "kit" },
+        { id: "club_away", name: "Club Away Kit", cost: 100, rarity: "Uncommon", type: "kit" },
+        { id: "club_third", name: "Club Third Kit", cost: 150, rarity: "Rare", type: "kit" },
+        { id: "golden_kit", name: "Golden Anniversary Kit", cost: 500, rarity: "Legendary", type: "kit" }
+      ],
+      balls: [
+        { id: "standard_ball", name: "Standard Ball", cost: 0, rarity: "Common", type: "ball", unlocked_by_default: true },
+        { id: "club_ball", name: "Club Ball", cost: 50, rarity: "Uncommon", type: "ball" },
+        { id: "golden_ball", name: "Golden Ball", cost: 300, rarity: "Epic", type: "ball" },
+        { id: "fire_ball", name: "Fire Ball", cost: 400, rarity: "Epic", type: "ball", special_effects: true }
+      ],
+      animations: [
+        { id: "standard_goal", name: "Standard Goal Celebration", cost: 0, rarity: "Common", type: "animation", unlocked_by_default: true },
+        { id: "backflip", name: "Backflip Celebration", cost: 200, rarity: "Rare", type: "animation" },
+        { id: "team_huddle", name: "Team Huddle Celebration", cost: 300, rarity: "Epic", type: "animation" },
+        { id: "signature_move", name: "Signature Move Celebration", cost: 500, rarity: "Legendary", type: "animation", customizable: true }
+      ],
+      player_models: [
+        { id: "standard_player", name: "Standard Player Model", cost: 0, rarity: "Common", type: "player_model", unlocked_by_default: true },
+        { id: "enhanced_player", name: "Enhanced Player Model", cost: 200, rarity: "Rare", type: "player_model" },
+        { id: "star_player", name: "Star Player Model", cost: 600, rarity: "Epic", type: "player_model", special_effects: true }
+      ],
+      game_modes: [
+        { id: "standard_game", name: "Standard Game", cost: 0, rarity: "Common", type: "game_mode", unlocked_by_default: true },
+        { id: "quick_game", name: "Quick Game Mode", cost: 100, rarity: "Uncommon", type: "game_mode" },
+        { id: "tournament_mode", name: "Tournament Mode", cost: 300, rarity: "Rare", type: "game_mode" },
+        { id: "league_mode", name: "League Mode", cost: 500, rarity: "Epic", type: "game_mode" },
+        { id: "champions_mode", name: "Champions Mode", cost: 1000, rarity: "Legendary", type: "game_mode" }
+      ],
+      stadiums: [
+        { id: "standard_stadium", name: "Standard Stadium", cost: 0, rarity: "Common", type: "stadium", unlocked_by_default: true },
+        { id: "club_stadium", name: "Club Stadium", cost: 300, rarity: "Rare", type: "stadium" },
+        { id: "national_stadium", name: "National Stadium", cost: 700, rarity: "Epic", type: "stadium" },
+        { id: "legendary_stadium", name: "Legendary Stadium", cost: 1500, rarity: "Legendary", type: "stadium", special_effects: true, customizable: true }
+      ],
+      special_abilities: [
+        { id: "power_shot", name: "Power Shot", cost: 200, rarity: "Rare", type: "special_ability", effect: "Increases shot power by 20%" },
+        { id: "precision_pass", name: "Precision Pass", cost: 200, rarity: "Rare", type: "special_ability", effect: "Increases pass accuracy by 15%" },
+        { id: "quick_dribble", name: "Quick Dribble", cost: 300, rarity: "Epic", type: "special_ability", effect: "Adds diagonal movement to certain player types" },
+        { id: "tactical_vision", name: "Tactical Vision", cost: 400, rarity: "Epic", type: "special_ability", effect: "Shows additional possible moves for teammates" },
+        { id: "captain_leadership", name: "Captain's Leadership", cost: 800, rarity: "Legendary", type: "special_ability", effect: "Boosts nearby teammates' abilities" }
+      ]
+    };
+  }
+  
+  /**
+   * Get all available unlockables for a user
+   */
+  getAvailableUnlockables(username) {
+    const user = this.userAccountSystem.getUser(username);
+    if (!user) throw new Error("User not found");
+    
+    // Initialize user unlockables if not exists
+    user.unlockables = user.unlockables || {
+      unlocked: [],
+      equipped: {}
+    };
+    
+    // Add default unlockables if they're missing
+    for (const category in this.unlockables) {
+      for (const item of this.unlockables[category]) {
+        if (item.unlocked_by_default && !user.unlockables.unlocked.includes(item.id)) {
+          user.unlockables.unlocked.push(item.id);
+        }
+      }
+    }
+    
+    // Initialize equipped items with defaults if missing
+    if (!user.unlockables.equipped.kit) {
+      user.unlockables.equipped.kit = "basic_home";
+    }
+    if (!user.unlockables.equipped.ball) {
+      user.unlockables.equipped.ball = "standard_ball";
+    }
+    if (!user.unlockables.equipped.animation) {
+      user.unlockables.equipped.animation = "standard_goal";
+    }
+    if (!user.unlockables.equipped.player_model) {
+      user.unlockables.equipped.player_model = "standard_player";
+    }
+    if (!user.unlockables.equipped.stadium) {
+      user.unlockables.equipped.stadium = "standard_stadium";
+    }
+    
+    // Save user updates
+    this.userAccountSystem.updateUser(user);
+    
+    // Determine unlocked and locked items
+    const unlockedItems = [];
+    const lockedItems = [];
+    
+    for (const category in this.unlockables) {
+      for (const item of this.unlockables[category]) {
+        // Check if user has unlocked this item
+        const isUnlocked = user.unlockables.unlocked.includes(item.id);
+        
+        // Check if item is equipped
+        const isEquipped = user.unlockables.equipped[item.type] === item.id;
+        
+        if (isUnlocked) {
+          unlockedItems.push({
+            ...item,
+            isEquipped
+          });
+        } else {
+          lockedItems.push({
+            ...item,
+            canAfford: (user.points || 0) >= item.cost
+          });
+        }
+      }
+    }
+    
+    return {
+      unlocked: unlockedItems,
+      locked: lockedItems,
+      equipped: user.unlockables.equipped,
+      userPoints: user.points || 0
+    };
+  }
+  
+  /**
+   * Unlock a new item for user
+   */
+  async unlockItem(username, itemId) {
+    const user = this.userAccountSystem.getUser(username);
+    if (!user) throw new Error("User not found");
+    
+    // Find the item
+    let foundItem = null;
+    for (const category in this.unlockables) {
+      const item = this.unlockables[category].find(i => i.id === itemId);
+      if (item) {
+        foundItem = item;
+        break;
+      }
+    }
+    
+    if (!foundItem) {
+      throw new Error("Item not found");
+    }
+    
+    // Initialize user unlockables if not exists
+    user.unlockables = user.unlockables || {
+      unlocked: [],
+      equipped: {}
+    };
+    
+    // Check if already unlocked
+    if (user.unlockables.unlocked.includes(itemId)) {
+      return { unlocked: false, reason: "already_unlocked" };
+    }
+    
+    // Check if user has enough points
+    if ((user.points || 0) < foundItem.cost) {
+      return { unlocked: false, reason: "insufficient_points" };
+    }
+    
+    // Deduct points
+    user.points -= foundItem.cost;
+    
+    // Add to unlocked items
+    user.unlockables.unlocked.push(itemId);
+    
+    // For blockchain-enabled users, mint NFT for rare or higher items
+    if (user.isKycVerified && user.walletAddress && 
+        (foundItem.rarity === "Rare" || foundItem.rarity === "Epic" || foundItem.rarity === "Legendary")) {
+      try {
+        const metadata = {
+          name: foundItem.name,
+          description: `${foundItem.rarity} ${foundItem.type} item in FootballChess.`,
+          image: `https://footballchess.com/items/${itemId}.png`,
+          attributes: [
+            { trait_type: "Type", value: foundItem.type },
+            { trait_type: "Rarity", value: foundItem.rarity }
+          ]
+        };
+        
+        await this.blockchainManager.mintBadgeNFT(
+          user.walletAddress,
+          `item_${itemId}`,
+          metadata
+        );
+      } catch (error) {
+        console.error("Failed to mint item NFT:", error);
+        // Continue with unlocking even if blockchain fails
+      }
+    } else if (user.age < 18 && 
+               (foundItem.rarity === "Rare" || foundItem.rarity === "Epic" || foundItem.rarity === "Legendary")) {
+      // For underage users, store NFT data to be claimed later
+      user.pendingNfts = user.pendingNfts || [];
+      user.pendingNfts.push({
+        itemId,
+        name: foundItem.name,
+        description: `${foundItem.rarity} ${foundItem.type} item in FootballChess.`,
+        image: `https://footballchess.com/items/${itemId}.png`,
+        type: "item",
+        timestamp: new Date()
+      });
+    }
+    
+    // Save user updates
+    this.userAccountSystem.updateUser(user);
+    
+    return {
+      unlocked: true,
+      item: foundItem,
+      remainingPoints: user.points
+    };
+  }
+  
+  /**
+   * Equip an unlocked item
+   */
+  equipItem(username, itemId) {
+    const user = this.userAccountSystem.getUser(username);
+    if (!user) throw new Error("User not found");
+    
+    // Find the item
+    let foundItem = null;
+    for (const category in this.unlockables) {
+      const item = this.unlockables[category].find(i => i.id === itemId);
+      if (item) {
+        foundItem = item;
+        break;
+      }
+    }
+    
+    if (!foundItem) {
+      throw new Error("Item not found");
+    }
+    
+    // Check if item is unlocked
+    if (!user.unlockables || !user.unlockables.unlocked.includes(itemId)) {
+      throw new Error("Item not unlocked");
+    }
+    
+    // Update equipped item
+    user.unlockables.equipped[foundItem.type] = itemId;
+    
+    // Save user updates
+    this.userAccountSystem.updateUser(user);
+    
+    return {
+      equipped: true,
+      item: foundItem,
+      allEquipped: user.unlockables.equipped
+    };
+  }
+}
+
+/**
+ * Marketplace System
+ * Allows players to trade items, player cards, and other collectibles
+ */
+class MarketplaceSystem {
+  constructor(userAccountSystem, blockchainManager) {
+    this.userAccountSystem = userAccountSystem;
+    this.blockchainManager = blockchainManager;
+    this.listings = [];
+    this.transactions = [];
+  }
+  
+  /**
+   * Create a new marketplace listing
+   */
+  async createListing(username, itemId, price, description) {
+    const user = this.userAccountSystem.getUser(username);
+    if (!user) throw new Error("User not found");
+    
+    // Verify KYC for marketplace usage
+    if (!user.isKycVerified) {
+      throw new Error("KYC verification required to use marketplace");
+    }
+    
+    // Check if user owns the NFT
+    const ownsItem = user.nfts && user.nfts.some(nft => 
+      nft.status === 'minted' && (nft.id === itemId || nft.tokenId === itemId)
+    );
+    
+    if (!ownsItem) {
+      throw new Error("User does not own this item");
+    }
+    
+    // Create listing
+    const listing = {
+      id: `listing_${Date.now()}_${Math.random().toString(36).substring(2, 15)}`,
+      itemId,
+      seller: username,
+      price,
+      description,
+      createdAt: new Date(),
+      status: 'active',
+      expiresAt: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000) // 7 days expiration
+    };
+    
+    this.listings.push(listing);
+    
+    return listing;
+  }
+  
+  /**
+   * Buy an item from the marketplace
+   */
+  async buyItem(username, listingId) {
+    const buyer = this.userAccountSystem.getUser(username);
+    if (!buyer) throw new Error("Buyer not found");
+    
+    // Verify KYC for marketplace usage
+    if (!buyer.isKycVerified) {
+      throw new Error("KYC verification required to use marketplace");
+    }
+    
+    // Find the listing
+    const listing = this.listings.find(l => l.id === listingId && l.status === 'active');
+    if (!listing) {
+      throw new Error("Listing not found or inactive");
+    }
+    
+    // Find the seller
+    const seller = this.userAccountSystem.getUser(listing.seller);
+    if (!seller) {
+      throw new Error("Seller not found");
+    }
+    
+    // Check if buyer has enough points
+    if ((buyer.points || 0) < listing.price) {
+      throw new Error("Insufficient points to buy item");
+    }
+    
+    // Check if buyer is not the seller
+    if (buyer.username === seller.username) {
+      throw new Error("Cannot buy your own item");
+    }
+    
+    // Process the transaction on blockchain
+    if (buyer.walletAddress && seller.walletAddress) {
+      try {
+        // In a real application, this would call the blockchain to transfer the NFT
+        const txHash = `simulated_tx_${Date.now()}`;
+        
+        // Update listing status
+        listing.status = 'sold';
+        listing.soldAt = new Date();
+        listing.buyer = buyer.username;
+        listing.transactionHash = txHash;
+        
+        // Deduct points from buyer
+        buyer.points -= listing.price;
+        
+        // Add points to seller (with 5% marketplace fee)
+        const marketplaceFee = listing.price * 0.05;
+        const sellerProceeds = listing.price - marketplaceFee;
+        seller.points = seller.points || 0;
+        seller.points += sellerProceeds;
+        
+        // Transfer NFT from seller to buyer
+        const nftIndex = seller.nfts.findIndex(nft => 
+          nft.status === 'minted' && (nft.id === listing.itemId || nft.tokenId === listing.itemId)
+        );
+        
+        if (nftIndex === -1) {
+          throw new Error("NFT not found in seller's collection");
+        }
+        
+        const nft = {...seller.nfts[nftIndex]};
+        seller.nfts.splice(nftIndex, 1);
+        
+        // Add NFT to buyer's collection
+        buyer.nfts = buyer.nfts || [];
+        buyer.nfts.push({
+          ...nft,
+          previousOwner: seller.username,
+          acquiredAt: new Date(),
+          acquiredVia: 'marketplace',
+          price: listing.price
+        });
+        
+        // Record transaction
+        const transaction = {
+          id: `transaction_${Date.now()}_${Math.random().toString(36).substring(2, 15)}`,
+          listingId,
+          itemId: listing.itemId,
+          seller: seller.username,
+          buyer: buyer.username,
+          price: listing.price,
+          marketplaceFee    // Find all tournaments user participated in
+    const userTournaments = this.tournaments.filter(t => 
+      t.participants.some(p => p.username === username)
+    );
+    
+    // Get user's matches
+    const userMatches = this.matches.filter(m => 
+      m.players.some(p => p.username === username)
+    );
+    
+    // Group tournaments by status
+    const active = userTournaments.filter(t => t.status === 'in_progress');
+    const completed = userTournaments.filter(t => t.status === 'completed');
+    const registered = userTournaments.filter(t => t.status === 'registration');
+    
+    return {
+      active,
+      completed,
+      registered,
+      matches: userMatches
+    };
+  }
+}
+
+/**
+ * Time-Based Rewards System
+ * Manages daily, weekly, monthly, seasonal and yearly rewards
+ */
+class TimeRewardsSystem {
+  constructor(userAccountSystem, achievementSystem, blockchainManager) {
+    this.userAccountSystem = userAccountSystem;
+    this.achievementSystem = achievementSystem;
+    this.blockchainManager = blockchainManager;
+    
+    // Define reward schedules
+    this.rewardSchedules = {
+      daily: {
+        // Basic daily login rewards
+        login: [
+          { day: 1, tokens: 5, xp: 10, description: "Daily Login" },
+          { day: 2, tokens: 7, xp: 15, description: "2-Day Streak" },
+          { day: 3, tokens: 10, xp: 20, description: "3-Day Streak" },
+          { day: 4, tokens: 15, xp: 25, description: "4-Day Streak" },
+          { day: 5, tokens: 20, xp: 30, description: "5-Day Streak" },
+          { day: 6, tokens: 30, xp: 40, description: "6-Day Streak" },
+          { day: 7, tokens: 50, xp: 100, description: "7-Day Streak Bonus!" },
+        ],
+        // Rewards for completing daily challenges
+        challenges: [
+          { id: "win_game", tokens: 10, xp: 20, description: "Win a game" },
+          { id: "score_goals", tokens: 5, xp: 10, requirement: 3, description: "Score 3 goals" },
+          { id: "play_games", tokens: 8, xp: 15, requirement: 3, description: "Play 3 games" },
+          { id: "social_activity", tokens: 5, xp: 10, requirement: 3, description: "Like, comment, or share 3 times" }
+        ]
+      },
+      weekly: {
+        login: [
+          { week: 1, tokens: 50, xp: 100, description: "Weekly Login Bonus" },
+          { week: 2, tokens: 75, xp: 150, description: "2-Week Streak" },
+          { week: 3, tokens: 100, xp: 200, description: "3-Week Streak" },
+          { week: 4, tokens: 150, xp: 300, description: "4-Week Streak" }
+        ],
+        challenges: [
+          { id: "win_games", tokens: 30, xp: 60, requirement: 10, description: "Win 10 games" },
+          { id: "tournament", tokens: 50, xp: 100, description: "Participate in a tournament" },
+          { id: "score_goals", tokens: 25, xp: 50, requirement: 20, description: "Score 20 goals" },
+          { id: "clean_sheets", tokens: 35, xp: 70, requirement: 5, description: "Get 5 clean sheets" }
+        ]
+      },
+      monthly: {
+        login: [
+          { month: 1, tokens: 200, xp: 400, description: "Monthly Login Bonus" },
+          { month: 2, tokens: 300, xp: 600, description: "2-Month Streak" },
+          { month: 3, tokens: 500, xp: 1000, description: "3-Month Streak" }
+        ],
+        challenges: [
+          { id: "win_tournament", tokens: 150, xp: 300, description: "Win a tournament" },
+          { id: "reach_level", tokens: 100, xp: 200, requirement: 5, description: "Reach level 5" },
+          { id: "collect_cards", tokens: 120, xp: 240, requirement: 10, description: "Collect 10 player cards" },
+          { id: "social_influence", tokens: 80, xp: 160, requirement: 100, description: "Get 100 likes on your posts" }
+        ]
+      },
+      seasonal: {
+        // 3-month seasons with special themes
+        rewards: [
+          { 
+            id: "spring_season", 
+            tokens: 800, 
+            xp: 1600, 
+            nft: true, 
+            description: "Spring Season Completion",
+            exclusive_items: ["Spring Kit", "Cherry Blossom Ball"]
+          },
+          { 
+            id: "summer_season", 
+            tokens: 800, 
+            xp: 1600, 
+            nft: true, 
+            description: "Summer Season Completion",
+            exclusive_items: ["Beach Kit", "Golden Sun Ball"]
+          },
+          { 
+            id: "fall_season", 
+            tokens: 800, 
+            xp: 1600, 
+            nft: true, 
+            description: "Fall Season Completion",
+            exclusive_items: ["Autumn Kit", "Harvest Ball"]
+          },
+          { 
+            id: "winter_season", 
+            tokens: 800, 
+            xp: 1600, 
+            nft: true, 
+            description: "Winter Season Completion",
+            exclusive_items: ["Snow Kit", "Ice Crystal Ball"]
+          }
+        ],
+        challenges: [
+          { id: "seasonal_wins", tokens: 250, xp: 500, requirement: 50, description: "Win 50 games this season" },
+          { id: "seasonal_tournament", tokens: 300, xp: 600, description: "Reach top 3 in a seasonal tournament" },
+          { id: "seasonal_collection", tokens: 200, xp: 400, description: "Complete a seasonal collection" }
+        ]
+      },
+      yearly: {
+        anniversary: [
+          { 
+            year: 1, 
+            tokens: 2000, 
+            xp: 5000, 
+            nft: true, 
+            description: "1-Year Anniversary",
+            exclusive_items: ["Veteran Player Badge", "Anniversary Kit", "Commemorative Ball"]
+          },
+          { 
+            year: 2, 
+            tokens: 5000, 
+            xp: 10000, 
+            nft: true, 
+            description: "2-Year Anniversary",
+            exclusive_items: ["Dedicated Player Badge", "Legacy Kit", "Platinum Ball"]
+          }
+        ],
+        challenges: [
+          { id: "year_wins", tokens: 1000, xp: 2000, requirement: 200, description: "Win 200 games this year" },
+          { id: "year_tournaments", tokens: 1500, xp: 3000, requirement: 5, description: "Win 5 tournaments this year" },
+          { id: "year_cards", tokens: 800, xp: 1600, requirement: 50, description: "Collect 50 player cards this year" }
+        ]
+      }
+    };
+  }
+  
+  /**
+   * Record user login and award appropriate daily/streak rewards
+   */
+  async recordLogin(username) {
+    const user = this.userAccountSystem.getUser(username);
+    if (!user) throw new Error("User not found");
+    
+    // Initialize login tracking if not exists
+    user.loginActivity = user.loginActivity || {
+      lastLogin: null,
+      currentStreak: 0,
+      longestStreak: 0,
+      totalLogins: 0,
+      dailyRewards: {
+        lastClaimed: null,
+        streak: 0
+      },
+      weeklyRewards: {
+        lastClaimed: null,
+        streak: 0
+      },
+      monthlyRewards: {
+        lastClaimed: null,
+        streak: 0
+      },
+      yearlyRewards: {
+        anniversaries: []
+      }
+    };
+    
+    const now = new Date();
+    const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+    
+    // Calculate streak
+    if (user.loginActivity.lastLogin) {
+      const lastLogin = new Date(user.loginActivity.lastLogin);
+      const lastLoginDay = new Date(lastLogin.getFullYear(), lastLogin.getMonth(), lastLogin.getDate());
+      
+      const dayDifference = Math.floor((today - lastLoginDay) / (1000 * 60 * 60 * 24));
+      
+      if (dayDifference === 1) {
+        // Consecutive day login - increase streak
+        user.loginActivity.currentStreak += 1;
+      } else if (dayDifference > 1) {
+        // Streak broken
+        user.loginActivity.currentStreak = 1;
+      }
+      // If same day, don't change streak but don't award new daily rewards
+    } else {
+      // First login ever
+      user.loginActivity.currentStreak = 1;
+    }
+    
+    // Update longest streak if needed
+    if (user.loginActivity.currentStreak > user.loginActivity.longestStreak) {
+      user.loginActivity.longestStreak = user.loginActivity.currentStreak;
+    }
+    
+    // Update total logins
+    user.loginActivity.totalLogins += 1;
+    
+    // Update last login time
+    user.loginActivity.lastLogin = now;
+    
+    // Process daily rewards
+    const dailyRewardResult = await this.processDailyLoginReward(user);
+    
+    // Process weekly rewards
+    const weeklyRewardResult = await this.processWeeklyLoginReward(user);
+    
+    // Process monthly rewards
+    const monthlyRewardResult = await this.processMonthlyLoginReward(user);
+    
+    // Process yearly/anniversary rewards
+    const yearlyRewardResult = await this.processYearlyReward(user);
+    
+    // Update user data
+    this.userAccountSystem.updateUser(user);
+    
+    // Return login stats and rewards
+    return {
+      streak: user.loginActivity.currentStreak,
+      longestStreak: user.loginActivity.longestStreak,
+      totalLogins: user.loginActivity.totalLogins,
+      rewards: {
+        daily: dailyRewardResult,
+        weekly: weeklyRewardResult,
+        monthly: monthlyRewardResult,
+        yearly: yearlyRewardResult
+      }
+    };
+  }
+  
+  /**
+   * Process daily login rewards
+   */
+  async processDailyLoginReward(user) {
+    const now = new Date();
+    const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+    
+    // Check if daily reward was already claimed today
+    if (user.loginActivity.dailyRewards.lastClaimed) {
+      const lastClaimed = new Date(user.loginActivity.dailyRewards.lastClaimed);
+      const lastClaimedDay = new Date(lastClaimed.getFullYear(), lastClaimed.getMonth(), lastClaimed.getDate());
+      
+      if (lastClaimedDay.getTime() === today.getTime()) {
+        // Already claimed today
+        return { claimed: false, reason: "already_claimed_today" };
+      }
+      
+      // Check if consecutive day
+      const dayDifference = Math.floor((today - lastClaimedDay) / (1000 * 60 * 60 * 24));
+      
+      if (dayDifference === 1) {
+        // Consecutive day - increase streak
+        user.loginActivity.dailyRewards.streak += 1;
+      } else if (dayDifference > 1) {
+        // Streak broken
+        user.loginActivity.dailyRewards.streak = 1;
+      }
+    } else {
+      // First claim ever
+      user.loginActivity.dailyRewards.streak = 1;
+    }
+    
+    // Get the appropriate reward based on streak
+    const streakDay = Math.min(user.loginActivity.dailyRewards.streak, 7);
+    const reward = this.rewardSchedules.daily.login[streakDay - 1];
+    
+    // Update last claimed timestamp
+    user.loginActivity.dailyRewards.lastClaimed = now;
+    
+    // Award tokens and XP
+    user.points = user.points || 0;
+    user.points += reward.tokens;
+    
+    user.xp = user.xp || 0;
+    user.xp += reward.xp;
+    
+    // Check for level up
+    this.achievementSystem.checkAndUpdateUserLevel(user);
+    
+    // Track achievement for login streaks
+    if (user.loginActivity.dailyRewards.streak >= 7) {
+      await this.achievementSystem.trackAchievement(user.username, "LOGIN_STREAK", 1);
+    }
+    
+    // Award blockchain tokens if applicable
+    if (user.isKycVerified && user.walletAddress) {
+      try {
+        await this.blockchainManager.awardTokens(
+          user.walletAddress,
+          reward.tokens,
+          `Daily Login: ${reward.description}`
+        );
+      } catch (error) {
+        console.error("Failed to award blockchain tokens for daily login:", error);
+      }
+    } else if (user.age < 18) {
+      // For underage users, store rewards to be claimed later
+      user.pendingBlockchainRewards = user.pendingBlockchainRewards || [];
+      user.pendingBlockchainRewards.push({
+        amount: reward.tokens,
+        reason: `Daily Login: ${reward.description}`,
+        timestamp: now
+      });
+    }
+    
+    return {
+      claimed: true,
+      streak: user.loginActivity.dailyRewards.streak,
+      reward: {
+        tokens: reward.tokens,
+        xp: reward.xp,
+        description: reward.description
+      }
+    };
+  }
+  
+  /**
+   * Process weekly login rewards
+   */
+  async processWeeklyLoginReward(user) {
+    const now = new Date();
+    const startOfWeek = new Date(now);
+    startOfWeek.setDate(now.getDate() - now.getDay()); // Start of current week (Sunday)
+    startOfWeek.setHours(0, 0, 0, 0);
+    
+    // Check if weekly reward was already claimed this week
+    if (user.loginActivity.weeklyRewards.lastClaimed) {
+      const lastClaimed = new Date(user.loginActivity.weeklyRewards.lastClaimed);
+      
+      // If last claimed is within current week, no new reward
+      if (lastClaimed >= startOfWeek) {
+        return { claimed: false, reason: "already_claimed_this_week" };
+      }
+      
+      // Check if consecutive week
+      const lastClaimedStartOfWeek = new Date(lastClaimed);
+      lastClaimedStartOfWeek.setDate(lastClaimed.getDate() - lastClaimed.getDay());
+      lastClaimedStartOfWeek.setHours(0, 0, 0, 0);
+      
+      const weekDifference = Math.floor((startOfWeek - lastClaimedStartOfWeek) / (1000 * 60 * 60 * 24 * 7));
+      
+      if (weekDifference === 1) {
+        // Consecutive week - increase streak
+        user.loginActivity.weeklyRewards.streak += 1;
+      } else if (weekDifference > 1) {
+        // Streak broken
+        user.loginActivity.weeklyRewards.streak = 1;
+      }
+    } else {
+      // First claim ever
+      user.loginActivity.weeklyRewards.streak = 1;
+    }
+    
+    // Cap the weekly streak at the maximum defined in the schedule
+    const streakWeek = Math.min(user.loginActivity.weeklyRewards.streak, this.rewardSchedules.weekly.login.length);
+    const reward = this.rewardSchedules.weekly.login[streakWeek - 1];
+    
+    // Update last claimed timestamp
+    user.loginActivity.weeklyRewards.lastClaimed = now;
+    
+    // Award tokens and XP
+    user.points = user.points || 0;
+    user.points += reward.tokens;
+    
+    user.xp = user.xp || 0;
+    user.xp += reward.xp;
+    
+    // Check for level up
+    this.achievementSystem.checkAndUpdateUserLevel(user);
+    
+    // Award blockchain tokens if applicable
+    if (user.isKycVerified && user.walletAddress) {
+      try {
+        await this.blockchainManager.awardTokens(
+          user.walletAddress,
+          reward.tokens,
+          `Weekly Login: ${reward.description}`
+        );
+      } catch (error) {
+        console.error("Failed to award blockchain tokens for weekly login:", error);
+      }
+    } else if (user.age < 18) {
+      // For underage users, store rewards to be claimed later
+      user.pendingBlockchainRewards = user.pendingBlockchainRewards || [];
+      user.pendingBlockchainRewards.push({
+        amount: reward.tokens,
+        reason: `Weekly Login: ${reward.description}`,
+        timestamp: now
+      });
+    }
+    
+    return {
+      claimed: true,
+      streak: user.loginActivity.weeklyRewards.streak,
+      reward: {
+        tokens: reward.tokens,
+        xp: reward.xp,
+        description: reward.description
+      }
+    };
+  }
+  
+  /**
+   * Process monthly login rewards
+   */
+  async processMonthlyLoginReward(user) {
+    const now = new Date();
+    const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
+    
+    // Check if monthly reward was already claimed this month
+    if (user.loginActivity.monthlyRewards.lastClaimed) {
+      const lastClaimed = new Date(user.loginActivity.monthlyRewards.lastClaimed);
+      const lastClaimedMonth = new Date(lastClaimed.getFullYear(), lastClaimed.getMonth(), 1);
+      
+      // If last claimed is within current month, no new reward
+      if (lastClaimedMonth.getTime() === startOfMonth.getTime()) {
+        return { claimed: false, reason: "already_claimed_this_month" };
+      }
+      
+      // Check if consecutive month
+      const monthDifference = 
+        (now.getFullYear() - lastClaimed.getFullYear()) * 12 + 
+        (now.getMonth() - lastClaimed.getMonth());
+      
+      if (monthDifference === 1) {
+        // Consecutive month - increase streak
+        user.loginActivity.monthlyRewards.streak += 1;
+      } else if (monthDifference > 1) {
+        // Streak broken
+        user.loginActivity.monthlyRewards.streak = 1;
+      }
+    } else {
+      // First claim ever
+      user.loginActivity.monthlyRewards.streak = 1;
+    }
+    
+    // Cap the monthly streak at the maximum defined in the schedule
+    const streakMonth = Math.min(user.loginActivity.monthlyRewards.streak, this.rewardSchedules.monthly.login.length);
+    const reward = this.rewardSchedules.monthly.login[streakMonth - 1];
+    
+    // Update last claimed timestamp
+    user.loginActivity.monthlyRewards.lastClaimed = now;
+    
+    // Award tokens and XP
+    user.points = user.points || 0;
+    user.points += reward.tokens;
+    
+    user.xp = user.xp || 0;
+    user.xp += reward.xp;
+    
+    // Check for level up
+    this.achievementSystem.checkAndUpdateUserLevel(user);
+    
+    // Award blockchain tokens if applicable
+    if (user.isKycVerified && user.walletAddress) {
+      try {
+        await this.blockchainManager.awardTokens(
+          user.walletAddress,
+          reward.tokens,
+          `Monthly Login: ${reward.description}`
+        );
+      } catch (error) {
+        console.error("Failed to award blockchain tokens for monthly login:", error);
+      }
+    } else if (user.age < 18) {
+      // For underage users, store rewards to be claimed later
+      user.pendingBlockchainRewards = user.pendingBlockchainRewards || [];
+      user.pendingBlockchainRewards.push({
+        amount: reward.tokens,
+        reason: `Monthly Login: ${reward.description}`,
+        timestamp: now
+      });
+    }
+    
+    return {
+      claimed: true,
+      streak: user.loginActivity.monthlyRewards.streak,
+      reward: {
+        tokens: reward.tokens,
+        xp: reward.xp,
+        description: reward.description
+      }
+    };
+  }
+  
+  /**
+   * Process yearly/anniversary rewards
+   */
+  async processYearlyReward(user) {
+    const now = new Date();
+    
+    // Check if user account is at least a year old
+    if (!user.createdAt) return { claimed: false, reason: "no_creation_date" };
+    
+    const creationDate = new Date(user.createdAt);
+    const yearsSinceCreation = Math.floor((now - creationDate) / (1000 * 60 * 60 * 24 * 365));
+    
+    if (yearsSinceCreation < 1) {
+      return { claimed: false, reason: "account_less_than_a_year_old" };
+    }
+    
+    // Check if anniversary reward for this year was already claimed
+    const anniversaryClaimed = user.loginActivity.yearlyRewards.anniversaries.includes(yearsSinceCreation);
+    
+    if (anniversaryClaimed) {
+      return { claimed: false, reason: "already_claimed_this_anniversary" };
+    }
+    
+    // Find the appropriate anniversary reward
+    const anniversaryRewardIndex = Math.min(yearsSinceCreation, this.rewardSchedules.yearly.anniversary.length) - 1;
+    const reward = this.rewardSchedules.yearly.anniversary[anniversaryRewardIndex];
+    
+    // Mark anniversary as claimed
+    user.loginActivity.yearlyRewards.anniversaries.push(yearsSinceCreation);
+    
+    // Award tokens and XP
+    user.points = user.points || 0;
+    user.points += reward.tokens;
+    
+    user.xp = user.xp || 0;
+    user.xp += reward.xp;
+    
+    // Check for level up
+    this.achievementSystem.checkAndUpdateUserLevel(user);
+    
+    // Award blockchain tokens and NFT if applicable
+    if (user.isKycVerified && user.walletAddress) {
+      try {
+        await this.blockchainManager.awardTokens(
+          user.walletAddress,
+          reward.tokens,
+          `Anniversary: ${reward.description}`
+        );
+        
+        if (reward.nft) {
+          // Mint anniversary NFT
+          const metadata = {
+            name: `${reward.description} Badge`,
+            description: `Special NFT awarded for ${reward.description} with FootballChess.`,
+            image: `https://footballchess.com/anniversary/${yearsSinceCreation}_year.png`,
+            attributes: [
+              { trait_type: "Type", value: "Anniversary" },
+              { trait_type: "Year", value: yearsSinceCreation },
+              { trait_type: "Rarity", value: "Legendary" }
+            ]
+          };
+          
+          await this.blockchainManager.mintBadgeNFT(
+            user.walletAddress,
+            `anniversary_${yearsSinceCreation}_year`,
+            metadata
+          );
+        }
+      } catch (error) {
+        console.error("Failed to award blockchain tokens/NFT for anniversary:", error);
+      }
+    } else if (user.age < 18) {
+      // For underage users, store rewards to be claimed later
+      user.pendingBlockchainRewards = user.pendingBlockchainRewards || [];
+      user.pendingBlockchainRewards.push({
+        amount: reward.tokens,
+        reason: `Anniversary: ${reward.description}`,
+        timestamp: now,
+        nft: reward.nft ? {
+          name: `${reward.description} Badge`,
+          description: `Special NFT awarded for ${reward.description} with FootballChess.`,
+          image: `https://footballchess.com/anniversary/${yearsSinceCreation}_year.png`,
+          type: "anniversary"
+        } : null
+      });
+    }
+    
+    return {
+      claimed: true,
+      year: yearsSinceCreation,
+      reward: {
+        tokens: reward.tokens,
+        xp: reward.xp,
+        description: reward.description,
+        exclusiveItems: reward.exclusive_items
+      }
+    };
+  }
+  
+  /**
+   * Get current daily challenges for user
+   */
+  getDailyChallenges(username) {
+    const user = this.userAccountSystem.getUser(username);
+    if (!user) throw new Error("User not found");
+    
+    // Initialize challenges tracking if not exists
+    user.challenges = user.challenges || {
+      daily: {
+        date: null,
+        challenges: [],
+        completed: []
+      },
+      weekly: {
+        date: null,
+        challenges: [],
+        completed: []
+      },
+      monthly: {
+        date: null,
+        challenges: [],
+        completed: []
+      },
+      seasonal: {
+        season: null,
+        challenges: [],
+        completed: []
+      },
+      yearly: {
+        year: null,
+        challenges: [],
+        completed: []
+      }
+    };
+    
+    const now = new Date();
+    const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+    
+    // Check if we need to generate new daily challenges
+    if (!user.challenges.daily.date || new Date(user.challenges.daily.date).getTime() !== today.getTime()) {
+      // Generate new daily challenges
+      user.challenges.daily.date = today;
+      user.challenges.daily.challenges = this.generateDailyChallenges();
+      user.challenges.daily.completed = [];
+      
+      // Save user updates
+      this.userAccountSystem.updateUser(user);
+    }
+    
+    return {
+      date: user.challenges.daily.date,
+      challenges: user.challenges.daily.challenges,
+      completed: user.challenges.daily.completed
+    };
+  }
+  
+  /**
+   * Generate a set of daily challenges
+   */
+  generateDailyChallenges() {
+    // Get all possible daily challenges
+    const allChallenges = [...this.rewardSchedules.daily.challenges];
+    
+    // Randomly select 3 challenges
+    const selectedChallenges = [];
+    while (selectedChallenges.length < 3 && allChallenges.length > 0) {
+      const randomIndex = Math.floor(Math.random() * allChallenges.length);
+      selectedChallenges.push(allChallenges.splice(randomIndex, 1)[0]);
+    }
+    
+    // Add challenge progress tracking
+    return selectedChallenges.map(challenge => ({
+      ...challenge,
+      progress: 0,
+      completed: false
+    }));
+  }
+  
+  /**
+   * Update progress for a challenge
+   */
+  async updateChallengeProgress(username, type, challengeId, increment = 1) {
+    const user = this.userAccountSystem.getUser(username);
+    if (!user) throw new Error("User not found");
+    
+    // Make sure challenges are initialized
+    if (!user.challenges || !user.challenges[type]) {
+      throw new Error(`Challenge type "${type}" not found`);
+    }
+    
+    // Find the challenge
+    const challengeIndex = user.challenges[type].challenges.findIndex(c => c.id === challengeId);
+    if (challengeIndex === -1) {
+      throw new Error(`Challenge "${challengeId}" not found`);
+    }
+    
+    const challenge = user.challenges[type].challenges[challengeIndex];
+    
+    // Check if challenge is already completed
+    if (challenge.completed) {
+      return { status: 'already_completed' };
+    }
+    
+    // Update progress
+    challenge.progress += increment;
+    
+    // Check if challenge is completed
+    if (!challenge.requirement || challenge.progress >= challenge.requirement) {
+      challenge.completed = true;
+      user.challenges[type].completed.push(challengeId);
+      
+      // Award tokens and XP
+      user.points = user.points || 0;
+      user.points += challenge.tokens;
+      
+      user.xp = user.xp || 0;
+      user.xp += challenge.xp;
+      
+      // Check for level up
+      this.achievementSystem.checkAndUpdateUserLevel(user);
+      
+      // Award blockchain tokens if applicable
+      if (user.isKycVerified && user.walletAddress) {
+        try {
+          await this.blockchainManager.awardTokens(
+            user.walletAddress,
+            challenge.tokens,
+            `${type.charAt(0).toUpperCase() + type.slice(1)} Challenge: ${challenge.description}`
+          );
+        } catch (error) {
+          console.error(`Failed to award blockchain tokens for ${type} challenge:`, error);
+        }
+      } else if (user.age < 18) {
+        // For underage users, store rewards to be claimed later
+        user.pendingBlockchainRewards = user.pendingBlockchainRewards || [];
+        user.pendingBlockchainRewards.push({
+          amount: challenge.tokens,
+          reason: `${type.charAt(0).toUpperCase() + type.slice(1)} Challenge: ${challenge.description}`,
+          timestamp: new Date()
+        });
+      }
+      
+      // Save user updates
+      this.userAccountSystem.updateUser(user);
+      
+      return {
+        status: 'completed',
+        reward: {
+          tokens: challenge.tokens,
+          xp: challenge.xp
+        }
+      };
+    }
+    
+    // Save progress
+    this.userAccountSystem.updateUser(user);
+    
+    return {
+      status: 'updated',
+      progress: challenge.progress,
+      requirement: challenge.requirement
+    };
+  }
+  
+  /**
+   * Get current seasonal reward information
+   */
+  getCurrentSeason() {
+    const now = new Date();
+    const year = now.getFullYear();
+    const month = now.getMonth();
+    
+    let season;
+    let nextSeasonStart;
+    
+    if (month >= 0 && month <= 2) {
+      // Winter (Jan-Mar)
+      season = {
+        id: `winter_${year}`,
+        name: `Winter ${year}`,
+        theme: "Winter Wonderland",
+        startDate: new Date(year, 0, 1),
+        endDate: new Date(year, 3, 0)
+      };
+      nextSeasonStart = new Date(year, 3, 1);
+    } else if (month >= 3 && month <= 5) {
+      // Spring (Apr-Jun)
+      season = {
+        id: `spring_${year}`,
+        name: `Spring ${year}`,
+        theme: "Spring Renaissance",
+        startDate: new Date(year, 3, 1),
+        endDate: new Date(year, 6, 0)
+      };
+      nextSeasonStart = new Date(year, 6, 1);
+    } else if (month >= 6 && month <= 8) {
+      // Summer (Jul-Sep)
+      season = {
+        id: `summer_${year// FootballChess Gamification and Social Engine
+// Inspired by WordPress GamiPress but blockchain-powered
+
+import { ethers } from 'ethers';
+import { createSelector } from 'reselect';
+
+/**
+ * Achievement Types and Point Values
+ */
+const ACHIEVEMENT_TYPES = {
+  // Game Achievements
+  GAME_WON: { points: 100, title: "Victory", description: "Win a game of FootballChess" },
+  GAME_STREAK: { points: 50, title: "Winning Streak", description: "Win multiple games in a row" },
+  FIRST_GOAL: { points: 20, title: "First Goal", description: "Score your first goal" },
+  HAT_TRICK: { points: 80, title: "Hat Trick", description: "Score 3 goals in a single game" },
+  CLEAN_SHEET: { points: 70, title: "Clean Sheet", description: "Win a game without conceding a goal" },
+  COMEBACK: { points: 120, title: "Great Comeback", description: "Win after being 2+ goals behind" },
+  
+  // Social Achievements
+  FIRST_COMMENT: { points: 5, title: "Commentator", description: "Post your first comment" },
+  COMMENT_STREAK: { points: 15, title: "Active Voice", description: "Comment 5 days in a row" },
+  FIRST_SHARE: { points: 10, title: "Promoter", description: "Share game content for the first time" },
+  VIRAL_POST: { points: 50, title: "Going Viral", description: "Have a post with 100+ likes" },
+  CONTENT_CREATOR: { points: 40, title: "Content Creator", description: "Create and share 10 posts" },
+  
+  // Community Achievements
+  JOIN_TOURNAMENT: { points: 30, title: "Tournament Player", description: "Join your first tournament" },
+  WIN_TOURNAMENT: { points: 200, title: "Champion", description: "Win a tournament" },
+  REFERRED_FRIEND: { points: 25, title: "Ambassador", description: "Refer a friend who joins the game" },
+  COMMUNITY_VOTE: { points: 10, title: "Community Voice", description: "Participate in a community vote" },
+  
+  // Collection Achievements
+  FIRST_NFT: { points: 20, title: "Collector", description: "Mint your first player card NFT" },
+  COMPLETE_TEAM: { points: 120, title: "Team Manager", description: "Collect a full team of NFT player cards" },
+  RARE_CARD: { points: 100, title: "Scout", description: "Collect a rare player card" },
+  
+  // Progression Achievements
+  LEVEL_UP: { points: 30, title: "Level Up", description: "Reach a new level in FootballChess" },
+  MASTER_LEVEL: { points: 300, title: "Master", description: "Reach the highest level in FootballChess" },
+};
+
+/**
+ * Badge / Achievement Levels
+ */
+const BADGE_LEVELS = {
+  BRONZE: { threshold: 1, multiplier: 1 },
+  SILVER: { threshold: 5, multiplier: 2 },
+  GOLD: { threshold: 15, multiplier: 3 },
+  PLATINUM: { threshold: 30, multiplier: 4 },
+  DIAMOND: { threshold: 50, multiplier: 5 },
+};
+
+/**
+ * User Levels and XP Requirements
+ */
+const USER_LEVELS = [
+  { level: 1, xpRequired: 0, title: "Rookie" },
+  { level: 2, xpRequired: 100, title: "Amateur" },
+  { level: 3, xpRequired: 250, title: "Semi-Pro" },
+  { level: 4, xpRequired: 500, title: "Professional" },
+  { level: 5, xpRequired: 1000, title: "Veteran" },
+  { level: 6, xpRequired: 2000, title: "Star" },
+  { level: 7, xpRequired: 3500, title: "Superstar" },
+  { level: 8, xpRequired: 5000, title: "Legend" },
+  { level: 9, xpRequired: 7500, title: "Hall of Fame" },
+  { level: 10, xpRequired: 10000, title: "GOAT" },
+];
+
+/**
+ * Social Activity Reward Points
+ */
+const SOCIAL_REWARDS = {
+  CREATE_POST: 10,
+  COMMENT: 5,
+  LIKE: 1,
+  RECEIVE_LIKE: 2,
+  SHARE: 15,
+  POST_VIEWED: 0.1, // 0.1 points per view
+  RECEIVE_COMMENT: 3,
+};
+
+/**
+ * Blockchain Reward Contract Manager
+ */
+class BlockchainRewardsManager {
+  constructor() {
+    this.provider = null;
+    this.signer = null;
+    this.tokenContract = null;
+    this.achievementsContract = null;
+    this.socialTokenContract = null;
+    this.nftContract = null;
+    this.isInitialized = false;
+  }
+  
+  async initialize(providerUrl, privateKey) {
+    try {
+      this.provider = new ethers.providers.JsonRpcProvider(providerUrl);
+      this.signer = new ethers.Wallet(privateKey, this.provider);
+      
+      // Initialize token contracts - would use actual ABIs and addresses in production
+      this.tokenContract = new ethers.Contract(
+        "0x123...token", // Would be actual address
+        ["function mint(address to, uint256 amount) external"],
+        this.signer
+      );
+      
+      this.achievementsContract = new ethers.Contract(
+        "0x123...achievements", // Would be actual address
+        [
+          "function awardAchievement(address to, uint256 achievementId) external",
+          "function hasAchievement(address user, uint256 achievementId) external view returns (bool)"
+        ],
+        this.signer
+      );
+      
+      this.socialTokenContract = new ethers.Contract(
+        "0x123...social", // Would be actual address
+        ["function mintSocialReward(address to, uint256 amount, uint256 activityType) external"],
+        this.signer
+      );
+      
+      this.nftContract = new ethers.Contract(
+        "0x123...nft", // Would be actual address
+        ["function mintBadge(address to, uint256 badgeId, string memory uri) external"],
+        this.signer
+      );
+      
+      this.isInitialized = true;
+      return true;
+    } catch (error) {
+      console.error("Failed to initialize blockchain contracts:", error);
+      return false;
+    }
+  }
+  
+  async awardTokens(userAddress, amount, reason) {
+    if (!this.isInitialized) throw new Error("Blockchain manager not initialized");
+    
+    try {
+      const tx = await this.tokenContract.mint(userAddress, amount);
+      await tx.wait();
+      
+      return {
+        success: true,
+        txHash: tx.hash,
+        amount,
+        reason
+      };
+    } catch (error) {
+      console.error("Failed to award tokens:", error);
+      throw error;
+    }
+  }
+  
+  async recordAchievement(userAddress, achievementId) {
+    if (!this.isInitialized) throw new Error("Blockchain manager not initialized");
+    
+    try {
+      const tx = await this.achievementsContract.awardAchievement(userAddress, achievementId);
+      await tx.wait();
+      
+      return {
+        success: true,
+        txHash: tx.hash,
+        achievementId
+      };
+    } catch (error) {
+      console.error("Failed to record achievement:", error);
+      throw error;
+    }
+  }
+  
+  async mintBadgeNFT(userAddress, badgeId, metadata) {
+    if (!this.isInitialized) throw new Error("Blockchain manager not initialized");
+    
+    try {
+      // First, we'd upload metadata to IPFS - simulated here
+      const metadataUri = `ipfs://bafybei${Math.random().toString(36).substring(2, 15)}`;
+      
+      const tx = await this.nftContract.mintBadge(userAddress, badgeId, metadataUri);
+      await tx.wait();
+      
+      return {
+        success: true,
+        txHash: tx.hash,
+        badgeId,
+        metadataUri
+      };
+    } catch (error) {
+      console.error("Failed to mint badge NFT:", error);
+      throw error;
+    }
+  }
+  
+  async awardSocialTokens(userAddress, amount, activityType) {
+    if (!this.isInitialized) throw new Error("Blockchain manager not initialized");
+    
+    try {
+      const tx = await this.socialTokenContract.mintSocialReward(userAddress, amount, activityType);
+      await tx.wait();
+      
+      return {
+        success: true,
+        txHash: tx.hash,
+        amount,
+        activityType
+      };
+    } catch (error) {
+      console.error("Failed to award social tokens:", error);
+      throw error;
+    }
+  }
+}
+
+/**
+ * Achievement Tracker
+ */
+class AchievementSystem {
+  constructor(blockchainManager, userAccountSystem) {
+    this.blockchainManager = blockchainManager;
+    this.userAccountSystem = userAccountSystem;
+    this.achievementTypes = ACHIEVEMENT_TYPES;
+    this.badgeLevels = BADGE_LEVELS;
+  }
+  
+  async trackAchievement(username, achievementType, count = 1) {
+    const user = this.userAccountSystem.getUser(username);
+    if (!user) throw new Error("User not found");
+    
+    // Initialize user achievements if not exists
+    user.achievements = user.achievements || {};
+    user.achievements[achievementType] = user.achievements[achievementType] || 0;
+    
+    // Update achievement count
+    const previousCount = user.achievements[achievementType];
+    user.achievements[achievementType] += count;
+    const newCount = user.achievements[achievementType];
+    
+    // Check if user leveled up this achievement
+    const newBadgeLevel = this.getAchievementLevel(newCount);
+    const previousBadgeLevel = this.getAchievementLevel(previousCount);
+    
+    let leveledUp = false;
+    let pointsEarned = 0;
+    
+    if (newBadgeLevel !== previousBadgeLevel) {
+      leveledUp = true;
+      
+      // Calculate points based on achievement type and badge level
+      const basePoints = this.achievementTypes[achievementType]?.points || 0;
+      const multiplier = this.badgeLevels[newBadgeLevel]?.multiplier || 1;
+      pointsEarned = basePoints * multiplier;
+      
+      // Update user points
+      user.points = user.points || 0;
+      user.points += pointsEarned;
+      
+      // Update user XP
+      user.xp = user.xp || 0;
+      user.xp += pointsEarned;
+      
+      // Check for level up
+      this.checkAndUpdateUserLevel(user);
+      
+      // Record achievement on blockchain if user is KYC verified and has wallet
+      if (user.isKycVerified && user.walletAddress) {
+        try {
+          const achievementId = `${achievementType}_${newBadgeLevel}`;
+          await this.blockchainManager.recordAchievement(user.walletAddress, achievementId);
+          
+          // Mint badge NFT
+          const metadata = {
+            name: `${this.achievementTypes[achievementType]?.title || achievementType} - ${newBadgeLevel}`,
+            description: this.achievementTypes[achievementType]?.description || "",
+            image: `https://footballchess.com/badges/${achievementType}_${newBadgeLevel}.png`,
+            attributes: [
+              { trait_type: "Achievement", value: this.achievementTypes[achievementType]?.title || achievementType },
+              { trait_type: "Level", value: newBadgeLevel },
+              { trait_type: "Rarity", value: newBadgeLevel }
+            ]
+          };
+          
+          await this.blockchainManager.mintBadgeNFT(user.walletAddress, achievementId, metadata);
+          
+          // Award tokens
+          await this.blockchainManager.awardTokens(
+            user.walletAddress, 
+            pointsEarned, 
+            `Achievement: ${this.achievementTypes[achievementType]?.title || achievementType} ${newBadgeLevel}`
+          );
+        } catch (error) {
+          console.error("Failed to record achievement on blockchain:", error);
+          // Continue with local achievement tracking even if blockchain fails
+        }
+      } else if (user.age < 18) {
+        // For underage users, store achievements to be claimed later
+        user.pendingBlockchainAchievements = user.pendingBlockchainAchievements || [];
+        user.pendingBlockchainAchievements.push({
+          type: achievementType,
+          level: newBadgeLevel,
+          points: pointsEarned,
+          timestamp: new Date()
+        });
+      }
+      
+      // Add to achievement history
+      user.achievementHistory = user.achievementHistory || [];
+      user.achievementHistory.push({
+        type: achievementType,
+        level: newBadgeLevel,
+        points: pointsEarned,
+        timestamp: new Date()
+      });
+    }
+    
+    // Save user updates
+    this.userAccountSystem.updateUser(user);
+    
+    return {
+      achievementType,
+      previousCount,
+      newCount,
+      previousLevel: previousBadgeLevel,
+      newLevel: newBadgeLevel,
+      leveledUp,
+      pointsEarned
+    };
+  }
+  
+  getAchievementLevel(count) {
+    if (count >= this.badgeLevels.DIAMOND.threshold) return "DIAMOND";
+    if (count >= this.badgeLevels.PLATINUM.threshold) return "PLATINUM";
+    if (count >= this.badgeLevels.GOLD.threshold) return "GOLD";
+    if (count >= this.badgeLevels.SILVER.threshold) return "SILVER";
+    if (count >= this.badgeLevels.BRONZE.threshold) return "BRONZE";
+    return null;
+  }
+  
+  checkAndUpdateUserLevel(user) {
+    const currentLevel = user.level || 1;
+    let newLevel = currentLevel;
+    
+    // Find the highest level the user qualifies for
+    for (let i = USER_LEVELS.length - 1; i >= 0; i--) {
+      if (user.xp >= USER_LEVELS[i].xpRequired) {
+        newLevel = USER_LEVELS[i].level;
+        break;
+      }
+    }
+    
+    // If user leveled up, update level and trigger level up achievement
+    if (newLevel > currentLevel) {
+      user.level = newLevel;
+      user.levelTitle = USER_LEVELS[newLevel - 1].title;
+      
+      // Track level up achievement
+      this.trackAchievement(user.username, "LEVEL_UP", 1);
+      
+      // Check for master level
+      if (newLevel === USER_LEVELS.length) {
+        this.trackAchievement(user.username, "MASTER_LEVEL", 1);
+      }
+      
+      return true;
+    }
+    
+    return false;
+  }
+  
+  getUserAchievements(username) {
+    const user = this.userAccountSystem.getUser(username);
+    if (!user) throw new Error("User not found");
+    
+    // Prepare achievement data
+    const achievements = [];
+    
+    if (user.achievements) {
+      for (const [type, count] of Object.entries(user.achievements)) {
+        const level = this.getAchievementLevel(count);
+        const achievementInfo = this.achievementTypes[type] || { 
+          title: type, 
+          description: "Achievement", 
+          points: 10 
+        };
+        
+        achievements.push({
+          type,
+          count,
+          level,
+          title: achievementInfo.title,
+          description: achievementInfo.description,
+          points: achievementInfo.points,
+          progress: this.calculateNextLevelProgress(count)
+        });
+      }
+    }
+    
+    return {
+      achievements,
+      totalPoints: user.points || 0,
+      level: user.level || 1,
+      levelTitle: user.levelTitle || USER_LEVELS[0].title,
+      xp: user.xp || 0,
+      nextLevelXp: this.getNextLevelXp(user.level || 1)
+    };
+  }
+  
+  calculateNextLevelProgress(count) {
+    // Calculate progress to next badge level
+    if (count >= this.badgeLevels.DIAMOND.threshold) return 100;
+    
+    if (count >= this.badgeLevels.PLATINUM.threshold) {
+      const current = count - this.badgeLevels.PLATINUM.threshold;
+      const required = this.badgeLevels.DIAMOND.threshold - this.badgeLevels.PLATINUM.threshold;
+      return Math.min(100, Math.floor((current / required) * 100));
+    }
+    
+    if (count >= this.badgeLevels.GOLD.threshold) {
+      const current = count - this.badgeLevels.GOLD.threshold;
+      const required = this.badgeLevels.PLATINUM.threshold - this.badgeLevels.GOLD.threshold;
+      return Math.min(100, Math.floor((current / required) * 100));
+    }
+    
+    if (count >= this.badgeLevels.SILVER.threshold) {
+      const current = count - this.badgeLevels.SILVER.threshold;
+      const required = this.badgeLevels.GOLD.threshold - this.badgeLevels.SILVER.threshold;
+      return Math.min(100, Math.floor((current / required) * 100));
+    }
+    
+    if (count >= this.badgeLevels.BRONZE.threshold) {
+      const current = count - this.badgeLevels.BRONZE.threshold;
+      const required = this.badgeLevels.SILVER.threshold - this.badgeLevels.BRONZE.threshold;
+      return Math.min(100, Math.floor((current / required) * 100));
+    }
+    
+    return Math.min(100, Math.floor((count / this.badgeLevels.BRONZE.threshold) * 100));
+  }
+  
+  getNextLevelXp(currentLevel) {
+    if (currentLevel >= USER_LEVELS.length) return null; // Max level
+    return USER_LEVELS[currentLevel].xpRequired;
+  }
+}
+
+/**
+ * Social System for Posts, Comments, Likes, and Shares
+ */
+class SocialSystem {
+  constructor(blockchainManager, userAccountSystem, achievementSystem) {
+    this.blockchainManager = blockchainManager;
+    this.userAccountSystem = userAccountSystem;
+    this.achievementSystem = achievementSystem;
+    this.posts = [];
+    this.comments = [];
+    this.likes = [];
+    this.shares = [];
+    this.views = [];
+  }
+  
+  async createPost(username, content, type, gameId = null, mediaUrl = null) {
+    const user = this.userAccountSystem.getUser(username);
+    if (!user) throw new Error("User not found");
+    
+    const post = {
+      id: `post_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`,
+      username,
+      content,
+      type, // 'text', 'image', 'video', 'game_highlight', etc.
+      gameId, // Reference to a game if post is related to a game
+      mediaUrl,
+      timestamp: new Date(),
+      likes: 0,
+      comments: 0,
+      shares: 0,
+      views: 0
+    };
+    
+    this.posts.push(post);
+    
+    // Award social points
+    const pointsEarned = SOCIAL_REWARDS.CREATE_POST;
+    
+    // Update user points and track achievements
+    user.socialPoints = user.socialPoints || 0;
+    user.socialPoints += pointsEarned;
+    
+    // Track achievements
+    await this.achievementSystem.trackAchievement(username, "CONTENT_CREATOR", 1);
+    
+    // Award blockchain tokens if user is verified
+    if (user.isKycVerified && user.walletAddress) {
+      try {
+        await this.blockchainManager.awardSocialTokens(
+          user.walletAddress,
+          pointsEarned,
+          1 // Activity type: CREATE_POST
+        );
+      } catch (error) {
+        console.error("Failed to award blockchain tokens for post:", error);
+      }
+    }
+    
+    // Save user updates
+    this.userAccountSystem.updateUser(user);
+    
+    return {
+      post,
+      pointsEarned
+    };
+  }
+  
+  async addComment(username, postId, content) {
+    const user = this.userAccountSystem.getUser(username);
+    if (!user) throw new Error("User not found");
+    
+    const post = this.posts.find(p => p.id === postId);
+    if (!post) throw new Error("Post not found");
+    
+    const comment = {
+      id: `comment_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`,
+      postId,
+      username,
+      content,
+      timestamp: new Date(),
+      likes: 0
+    };
+    
+    this.comments.push(comment);
+    
+    // Update post comment count
+    post.comments += 1;
+    
+    // Award social points to commenter
+    const pointsEarned = SOCIAL_REWARDS.COMMENT;
+    
+    // Update user points
+    user.socialPoints = user.socialPoints || 0;
+    user.socialPoints += pointsEarned;
+    
+    // Track achievements for commenter
+    await this.achievementSystem.trackAchievement(username, "FIRST_COMMENT", 1);
+    
+    // Award points to post creator for receiving comment
+    const postCreator = this.userAccountSystem.getUser(post.username);
+    if (postCreator && postCreator.username !== username) { // Don't award for self-comments
+      postCreator.socialPoints = postCreator.socialPoints || 0;
+      postCreator.socialPoints += SOCIAL_REWARDS.RECEIVE_COMMENT;
+      this.userAccountSystem.updateUser(postCreator);
+    }
+    
+    // Award blockchain tokens if user is verified
+    if (user.isKycVerified && user.walletAddress) {
+      try {
+        await this.blockchainManager.awardSocialTokens(
+          user.walletAddress,
+          pointsEarned,
+          2 // Activity type: COMMENT
+        );
+      } catch (error) {
+        console.error("Failed to award blockchain tokens for comment:", error);
+      }
+    }
+    
+    // Save user updates
+    this.userAccountSystem.updateUser(user);
+    
+    return {
+      comment,
+      pointsEarned
+    };
+  }
+  
+  async addLike(username, contentId) {
+    const user = this.userAccountSystem.getUser(username);
+    if (!user) throw new Error("User not found");
+    
+    // Check if contentId is for a post or comment
+    const post = this.posts.find(p => p.id === contentId);
+    const comment = !post ? this.comments.find(c => c.id === contentId) : null;
+    
+    if (!post && !comment) throw new Error("Content not found");
+    
+    // Check if user already liked this content
+    const existingLike = this.likes.find(l => 
+      l.username === username && l.contentId === contentId
+    );
+    
+    if (existingLike) throw new Error("Already liked this content");
+    
+    const like = {
+      id: `like_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`,
+      contentId,
+      username,
+      timestamp: new Date(),
+      contentType: post ? 'post' : 'comment'
+    };
+    
+    this.likes.push(like);
+    
+    // Update content like count
+    if (post) {
+      post.likes += 1;
+      
+      // Check for viral post achievement
+      if (post.likes >= 100) {
+        await this.achievementSystem.trackAchievement(post.username, "VIRAL_POST", 1);
+      }
+    } else {
+      comment.likes += 1;
+    }
+    
+    // Award social points to liker
+    const pointsEarned = SOCIAL_REWARDS.LIKE;
+    
+    // Update user points
+    user.socialPoints = user.socialPoints || 0;
+    user.socialPoints += pointsEarned;
+    
+    // Award points to content creator for receiving like
+    const contentCreator = this.userAccountSystem.getUser(
+      post ? post.username : comment.username
+    );
+    
+    if (contentCreator && contentCreator.username !== username) {
+      contentCreator.socialPoints = contentCreator.socialPoints || 0;
+      contentCreator.socialPoints += SOCIAL_REWARDS.RECEIVE_LIKE;
+      this.userAccountSystem.updateUser(contentCreator);
+    }
+    
+    // Award blockchain tokens if user is verified
+    if (user.isKycVerified && user.walletAddress) {
+      try {
+        await this.blockchainManager.awardSocialTokens(
+          user.walletAddress,
+          pointsEarned,
+          3 // Activity type: LIKE
+        );
+      } catch (error) {
+        console.error("Failed to award blockchain tokens for like:", error);
+      }
+    }
+    
+    // Save user updates
+    this.userAccountSystem.updateUser(user);
+    
+    return {
+      like,
+      pointsEarned
+    };
+  }
+  
+  async shareContent(username, contentId, platform) {
+    const user = this.userAccountSystem.getUser(username);
+    if (!user) throw new Error("User not found");
+    
+    // Check if contentId is for a post
+    const post = this.posts.find(p => p.id === contentId);
+    
+    if (!post) throw new Error("Post not found");
+    
+    const share = {
+      id: `share_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`,
+      contentId,
+      username,
+      platform, // 'twitter', 'facebook', 'whatsapp', etc.
+      timestamp: new Date()
+    };
+    
+    this.shares.push(share);
+    
+    // Update post share count
+    post.shares += 1;
+    
+    // Award social points to sharer
+    const pointsEarned = SOCIAL_REWARDS.SHARE;
+    
+    // Update user points
+    user.socialPoints = user.socialPoints || 0;
+    user.socialPoints += pointsEarned;
+    
+    // Track achievements
+    await this.achievementSystem.trackAchievement(username, "FIRST_SHARE", 1);
+    
+    // Award blockchain tokens if user is verified
+    if (user.isKycVerified && user.walletAddress) {
+      try {
+        await this.blockchainManager.awardSocialTokens(
+          user.walletAddress,
+          pointsEarned,
+          4 // Activity type: SHARE
+        );
+      } catch (error) {
+        console.error("Failed to award blockchain tokens for share:", error);
+      }
+    }
+    
+    // Save user updates
+    this.userAccountSystem.updateUser(user);
+    
+    return {
+      share,
+      pointsEarned
+    };
+  }
+  
+  async trackView(username, postId) {
+    // Anonymous views are also allowed
+    let user = null;
+    if (username) {
+      user = this.userAccountSystem.getUser(username);
+      if (!user) throw new Error("User not found");
+    }
+    
+    const post = this.posts.find(p => p.id === postId);
+    if (!post) throw new Error("Post not found");
+    
+    const view = {
+      id: `view_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`,
+      postId,
+      username: username || 'anonymous',
+      timestamp: new Date(),
+      duration: 0 // Will be updated when user leaves post
+    };
+    
+    this.views.push(view);
+    
+    // Update post view count
+    post.views += 1;
+    
+    let pointsEarned = 0;
+    
+    // Award social points to viewer (only if logged in)
+    if (user) {
+      pointsEarned = SOCIAL_REWARDS.POST_VIEWED;
+      
+      // Update user points
+      user.socialPoints = user.socialPoints || 0;
+      user.socialPoints += pointsEarned;
+      
+      // Save user updates
+      this.userAccountSystem.updateUser(user);
+    }
+    
+    return {
+      view,
+      pointsEarned
+    };
+  }
+  
+  async updateViewDuration(viewId, duration) {
+    const view = this.views.find(v => v.id === viewId);
+    if (!view) throw new Error("View not found");
+    
+    view.duration = duration;
+    
+    // Could award additional points based on view duration
+    return { success: true };
+  }
+  
+  getUserSocialActivity(username) {
+    const user = this.userAccountSystem.getUser(username);
+    if (!user) throw new Error("User not found");
+    
+    // Get all user's posts
+    const userPosts = this.posts.filter(p => p.username === username);
+    
+    // Get all user's comments
+    const userComments = this.comments.filter(c => c.username === username);
+    
+    // Get all user's likes
+    const userLikes = this.likes.filter(l => l.username === username);
+    
+    // Get all user's shares
+    const userShares = this.shares.filter(s => s.username === username);
+    
+    return {
+      socialPoints: user.socialPoints || 0,
+      posts: {
+        count: userPosts.length,
+        totalLikes: userPosts.reduce((sum, post) => sum + post.likes, 0),
+        totalComments: userPosts.reduce((sum, post) => sum + post.comments, 0),
+        totalShares: userPosts.reduce((sum, post) => sum + post.shares, 0),
+        totalViews: userPosts.reduce((sum, post) => sum + post.views, 0),
+        items: userPosts.slice(0, 5) // Return most recent 5 posts
+      },
+      comments: {
+        count: userComments.length,
+        totalLikes: userComments.reduce((sum, comment) => sum + comment.likes, 0),
+        items: userComments.slice(0, 5) // Return most recent 5 comments
+      },
+      likes: {
+        count: userLikes.length,
+        items: userLikes.slice(0, 5) // Return most recent 5 likes
+      },
+      shares: {
+        count: userShares.length,
+        items: userShares.slice(0, 5) // Return most recent 5 shares
+      }
+    };
+  }
+  
+  getFeed(username, page = 1, limit = 20) {
+    // Get user's following list if username is provided
+    let following = [];
+    if (username) {
+      const user = this.userAccountSystem.getUser(username);
+      if (user) {
+        following = user.following || [];
+      }
+    }
+    
+    // Get all posts sorted by time, with priority for following users
+    let feed = [...this.posts].sort((a, b) => {
+      // First sort by following status
+      const aFollowing = following.includes(a.username);
+      const bFollowing = following.includes(b.username);
+      
+      if (aFollowing && !bFollowing) return -1;
+      if (!aFollowing && bFollowing) return 1;
+      
+      // Then sort by timestamp (newest first)
+      return new Date(b.timestamp) - new Date(a.timestamp);
+    });
+    
+    // Paginate results
+    const startIndex = (page - 1) * limit;
+    const endIndex = page * limit;
+    
+    const paginatedFeed = feed.slice(startIndex, endIndex);
+    
+    // Enhance posts with comment, like data
+    const enhancedFeed = paginatedFeed.map(post => {
+      // Get recent comments for this post
+      const postComments = this.comments
+        .filter(c => c.postId === post.id)
+        .sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp))
+        .slice(0, 3); // Get 3 most recent comments
+      
+      // Get like data for this post
+      const postLikes = this.likes.filter(l => l.contentId === post.id);
+      
+      // Get share data for this post
+      const postShares = this.shares.filter(s => s.contentId === post.id);
+      
+      return {
+        ...post,
+        recentComments: postComments,
+        hasMoreComments: post.comments > postComments.length,
+        likedBy: postLikes.map(l => l.username).slice(0, 5),
+        sharedBy: postShares.map(s => s.username).slice(0, 5)
+      };
+    });
+    
+    return {
+      feed: enhancedFeed,
+      page,
+      limit,
+      total: feed.length,
+      hasMore: endIndex < feed.length
+    };
+  }
+  
+  getPostDetails(postId) {
+    const post = this.posts.find(p => p.id === postId);
+    if (!post) throw new Error("Post not found");
+    
+    // Get all comments for this post
+    const postComments = this.comments
+      .filter(c => c.postId === post.id)
+      .sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp));
+    
+    // Get like data for this post
+    const postLikes = this.likes.filter(l => l.contentId === post.id);
+    
+    // Get share data for this post
+    const postShares = this.shares.filter(s => s.contentId === post.id);
+    
+    // Get enhanced comment data with likes
+    const enhancedComments = postComments.map(comment => {
+      const commentLikes = this.likes.filter(l => l.contentId === comment.id);
+      
+      return {
+        ...comment,
+        likedBy: commentLikes.map(l => l.username)
+      };
+    });
+    
+    return {
+      post,
+      comments: enhancedComments,
+      likes: {
+        count: postLikes.length,
+        users: postLikes.map(l => l.username)
+      },
+      shares: {
+        count: postShares.length,
+        users: postShares.map(s => s.username)
+      }
+    };
+  }
+}
+
+/**
+ * Quests & Challenges System
+ */
+class QuestSystem {
+  constructor(userAccountSystem, achievementSystem, blockchainManager) {
+    this.userAccountSystem = userAccountSystem;
+    this.achievementSystem = achievementSystem;
+    this.blockchainManager = blockchainManager;
+    this.quests = [];
+    this.userQuestProgression = new Map(); // username -> quest progression
+  }
+  
+  createQuest(title, description, requirements, rewards, duration = null, startDate = null, endDate = null) {
+    const quest = {
+      id: `quest_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`,
+      title,
+      description,
+      requirements,
+      rewards,
+      duration, // in seconds, null if no time limit
+      startDate, // null if start immediately
+      endDate, // null if no end date
+      createdAt: new Date(),
+      status: 'active'
+    };
+    
+    this.quests.push(quest);
+    return quest;
+  }
+  
+  async startQuest(username, questId) {
+    const user = this.userAccountSystem.getUser(username);
+    if (!user) throw new Error("User not found");
+    
+    const quest = this.quests.find(q => q.id === questId);
+    if (!quest) throw new Error("Quest not found");
+    
+    // Check if quest is active
+    if (quest.status !== 'active') {
+      throw new Error("Quest is not active");
+    }
+    
+    // Check if quest has started yet
+    if (quest.startDate && new Date() < new Date(quest.startDate)) {
+      throw new Error("Quest has not started yet");
+    }
+    
+    // Check if quest has ended
+    if (quest.endDate && new Date() > new Date(quest.endDate)) {
+      throw new Error("Quest has already ended");
+    }
+    
+    // Initialize user's quest progression if not exists
+    if (!this.userQuestProgression.has(username)) {
+      this.userQuestProgression.set(username, new Map());
+    }
+    
+    const userQuests = this.userQuestProgression.get(username);
+    
+    // Check if user already started this quest
+    if (userQuests.has(questId)) {
+      throw new Error("User already started this quest");
+    }
+    
+    // Initialize progress for each requirement
+    const progress = {};
+    for (const [key, requirement] of Object.entries(quest.requirements)) {
+      progress[key] = {
+        current: 0,
+        required: requirement.count,
+        completed: false
+      };
+    }
+    
+    const userQuestData = {
+      questId,
+      progress,
+      startedAt: new Date(),
+      completedAt: null,
+      status: 'in_progress',
+      expiresAt: quest.duration ? new Date(Date.now() + quest.duration * 1000) : null
+    };
+    
+    userQuests.set(questId, userQuestData);
+    
+    return userQuestData;
+  }
+  
+  async updateQuestProgress(username, questId, requirementKey, increment = 1) {
+    const user = this.userAccountSystem.getUser(username);
+    if (!user) throw new Error("User not found");
+    
+    // Make sure user has started this quest
+    if (!this.userQuestProgression.has(username) || 
+        !this.userQuestProgression.get(username).has(questId)) {
+      throw new Error("User has not started this quest");
+    }
+    
+    const userQuestData = this.userQuestProgression.get(username).get(questId);
+    
+    // Check if quest is already completed
+    if (userQuestData.status === 'completed') {
+      return { status: 'already_completed' };
+    }
+    
+    // Check if quest has expired
+    if (userQuestData.expiresAt && new Date() > new Date(userQuestData.expiresAt)) {
+      userQuestData.status = 'expired';
+      return { status: 'expired' };
+    }
+    
+    // Make sure the requirement exists
+    if (!userQuestData.progress[requirementKey]) {
+      throw new Error(`Quest requirement "${requirementKey}" not found`);
+    }
+    
+    // Update progress
+    const requirement = userQuestData.progress[requirementKey];
+    requirement.current += increment;
+    
+    // Check if requirement is completed
+    if (requirement.current >= requirement.required) {
+      requirement.completed = true;
+      requirement.current = requirement.required; // Cap at required amount
+    }
+    
+    // Check if all requirements are completed
+    const allCompleted = Object.values(userQuestData.progress).every(req => req.completed);
+    
+    if (allCompleted) {
+      // Mark quest as completed
+      userQuestData.status = 'completed';
+      userQuestData.completedAt = new Date();
+      
+      // Award rewards
+      const quest = this.quests.find(q => q.id === questId);
+      
+      // Update user points
+      user.points = user.points || 0;
+      user.points += quest.rewards.points || 0;
+      
+      user.xp = user.xp || 0;
+      user.xp += quest.rewards.xp || 0;
+      
+      // Check for level up
+      this.achievementSystem.checkAndUpdateUserLevel(user);
+      
+      // Award specific achievements if any
+      if (quest.rewards.achievements) {
+        for (const [achievementType, count] of Object.entries(quest.rewards.achievements)) {
+          await this.achievementSystem.trackAchievement(username, achievementType, count);
+        }
+      }
+      
+      // Award blockchain tokens if applicable
+      if (quest.rewards.tokens && user.isKycVerified && user.walletAddress) {
+        try {
+          await this.blockchainManager.awardTokens(
+            user.walletAddress,
+            quest.rewards.tokens,
+            `Completed Quest: ${quest.title}`
+          );
+        } catch (error) {
+          console.error("Failed to award blockchain tokens for quest completion:", error);
+        }
+      } else if (quest.rewards.tokens && user.age < 18) {
+        // For underage users, store rewards to be claimed later
+        user.pendingBlockchainRewards = user.pendingBlockchainRewards || [];
+        user.pendingBlockchainRewards.push({
+          amount: quest.rewards.tokens,
+          reason: `Completed Quest: ${quest.title}`,
+          timestamp: new Date()
+        });
+      }
+      
+      // Save user updates
+      this.userAccountSystem.updateUser(user);
+      
+      return {
+        status: 'completed',
+        rewards: quest.rewards
+      };
+    }
+    
+    return {
+      status: 'updated',
+      progress: userQuestData.progress
+    };
+  }
+  
+  getUserQuests(username) {
+    const user = this.userAccountSystem.getUser(username);
+    if (!user) throw new Error("User not found");
+    
+    // Get all active quests
+    const activeQuests = this.quests.filter(q => {
+      // Filter out inactive quests
+      if (q.status !== 'active') return false;
+      
+      // Filter out quests that haven't started yet
+      if (q.startDate && new Date() < new Date(q.startDate)) return false;
+      
+      // Filter out quests that have already ended
+      if (q.endDate && new Date() > new Date(q.endDate)) return false;
+      
+      return true;
+    });
+    
+    // Get user's quest progression
+    const userQuests = this.userQuestProgression.get(username) || new Map();
+    
+    // Combine quest data with user progression
+    const questsWithProgress = activeQuests.map(quest => {
+      const userProgress = userQuests.get(quest.id);
+      
+      return {
+        ...quest,
+        progress: userProgress?.progress || null,
+        status: userProgress?.status || 'not_started',
+        startedAt: userProgress?.startedAt || null,
+        completedAt: userProgress?.completedAt || null,
+        expiresAt: userProgress?.expiresAt || null
+      };
+    });
+    
+    // Add completed quests
+    const completedQuests = Array.from(userQuests.values())
+      .filter(userQuest => userQuest.status === 'completed')
+      .map(userQuest => {
+        const quest = this.quests.find(q => q.id === userQuest.questId);
+        if (!quest) return null;
+        
+        return {
+          ...quest,
+          progress: userQuest.progress,
+          status: userQuest.status,
+          startedAt: userQuest.startedAt,
+          completedAt: userQuest.completedAt
+        };
+      })
+      .filter(Boolean);
+    
+    return {
+      active: questsWithProgress.filter(q => q.status === 'in_progress'),
+      available: questsWithProgress.filter(q => q.status === 'not_started'),
+      completed: completedQuests
+    };
+  }
+}
+
+/**
+ * Tournaments System
+ */
+class TournamentSystem {
+  constructor(userAccountSystem, achievementSystem, blockchainManager) {
+    this.userAccountSystem = userAccountSystem;
+    this.achievementSystem = achievementSystem;
+    this.blockchainManager = blockchainManager;
+    this.tournaments = [];
+    this.matches = [];
+  }
+  
+  createTournament(name, description, startDate, endDate, maxParticipants, entryFee = 0, prizes = {}) {
+    const tournament = {
+      id: `tournament_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`,
+      name,
+      description,
+      startDate: new Date(startDate),
+      endDate: new Date(endDate),
+      maxParticipants,
+      entryFee,
+      prizes,
+      participants: [],
+      brackets: [],
+      status: 'registration', // registration, in_progress, completed
+      createdAt: new Date()
+    };
+    
+    this.tournaments.push(tournament);
+    return tournament;
+  }
+  
+  async registerForTournament(username, tournamentId) {
+    const user = this.userAccountSystem.getUser(username);
+    if (!user) throw new Error("User not found");
+    
+    const tournament = this.tournaments.find(t => t.id === tournamentId);
+    if (!tournament) throw new Error("Tournament not found");
+    
+    // Check if registration is open
+    if (tournament.status !== 'registration') {
+      throw new Error("Tournament registration is closed");
+    }
+    
+    // Check if tournament is full
+    if (tournament.participants.length >= tournament.maxParticipants) {
+      throw new Error("Tournament is full");
+    }
+    
+    // Check if user is already registered
+    if (tournament.participants.some(p => p.username === username)) {
+      throw new Error("User already registered for this tournament");
+    }
+    
+    // Check if user has enough tokens for entry fee
+    if (tournament.entryFee > 0) {
+      if ((user.points || 0) < tournament.entryFee) {
+        throw new Error("User does not have enough points for entry fee");
+      }
+      
+      // Deduct entry fee
+      user.points -= tournament.entryFee;
+    }
+    
+    // Add user to participants
+    tournament.participants.push({
+      username,
+      registeredAt: new Date(),
+      status: 'active',
+      seed: tournament.participants.length + 1
+    });
+    
+    // Track achievement
+    await this.achievementSystem.trackAchievement(username, "JOIN_TOURNAMENT", 1);
+    
+    // Save user updates
+    this.userAccountSystem.updateUser(user);
+    
+    return {
+      success: true,
+      tournamentId,
+      position: tournament.participants.length
+    };
+  }
+  
+  startTournament(tournamentId) {
+    const tournament = this.tournaments.find(t => t.id === tournamentId);
+    if (!tournament) throw new Error("Tournament not found");
+    
+    // Check if tournament can be started
+    if (tournament.status !== 'registration') {
+      throw new Error("Tournament cannot be started");
+    }
+    
+    // Need at least 2 participants
+    if (tournament.participants.length < 2) {
+      throw new Error("Tournament needs at least 2 participants");
+    }
+    
+    // Set tournament status to in_progress
+    tournament.status = 'in_progress';
+    tournament.startedAt = new Date();
+    
+    // Generate brackets
+    tournament.brackets = this.generateBrackets(tournament.participants);
+    
+    // Generate matches for first round
+    this.generateMatches(tournamentId, 1);
+    
+    return {
+      success: true,
+      tournamentId,
+      brackets: tournament.brackets,
+      matches: this.matches.filter(m => m.tournamentId === tournamentId)
+    };
+  }
+  
+  generateBrackets(participants) {
+    // Sort participants by seed
+    const sortedParticipants = [...participants].sort((a, b) => a.seed - b.seed);
+    
+    // Calculate number of rounds needed
+    const numParticipants = sortedParticipants.length;
+    const numRounds = Math.ceil(Math.log2(numParticipants));
+    
+    // Calculate number of matches in first round
+    const numFirstRoundMatches = Math.pow(2, numRounds - 1);
+    
+    // Calculate number of byes needed
+    const totalSlots = Math.pow(2, numRounds);
+    const numByes = totalSlots - numParticipants;
+    
+    // Generate brackets
+    const brackets = [];
+    
+    // First round with byes
+    const firstRound = [];
+    for (let i = 0; i < numFirstRoundMatches; i++) {
+      // Determine if this match has a bye
+      let match;
+      
+      if (i < numByes) {
+        // This match has a bye - only one participant
+        match = {
+          matchId: `${i + 1}`,
+          roundNumber: 1,
+          position: i + 1,
+          participants: [sortedParticipants[i]],
+          bye: true
+        };
+      } else {
+        // Regular match - two participants
+        match = {
+          matchId: `${i + 1}`,
+          roundNumber: 1,
+          position: i + 1,
+          participants: [
+            sortedParticipants[i],
+            sortedParticipants[numParticipants - 1 - (i - numByes)]
+          ],
+          bye: false
+        };
+      }
+      
+      firstRound.push(match);
+    }
+    
+    brackets.push({
+      roundNumber: 1,
+      matches: firstRound
+    });
+    
+    // Generate remaining rounds (empty initially)
+    for (let round = 2; round <= numRounds; round++) {
+      const numMatches = Math.pow(2, numRounds - round);
+      const matches = [];
+      
+      for (let i = 0; i < numMatches; i++) {
+        matches.push({
+          matchId: `R${round}-${i + 1}`,
+          roundNumber: round,
+          position: i + 1,
+          participants: [],
+          bye: false
+        });
+      }
+      
+      brackets.push({
+        roundNumber: round,
+        matches
+      });
+    }
+    
+    return brackets;
+  }
+  
+  generateMatches(tournamentId, roundNumber) {
+    const tournament = this.tournaments.find(t => t.id === tournamentId);
+    if (!tournament) throw new Error("Tournament not found");
+    
+    // Find bracket for specified round
+    const bracket = tournament.brackets.find(b => b.roundNumber === roundNumber);
+    if (!bracket) throw new Error("Round not found");
+    
+    // Generate matches
+    for (const matchBracket of bracket.matches) {
+      // Skip if match already exists
+      const existingMatch = this.matches.find(m => 
+        m.tournamentId === tournamentId && 
+        m.roundNumber === roundNumber && 
+        m.position === matchBracket.position
+      );
+      
+      if (existingMatch) continue;
+      
+      // Create new match
+      const match = {
+        id: `match_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`,
+        tournamentId,
+        roundNumber,
+        position: matchBracket.position,
+        players: matchBracket.participants.map(p => ({
+          username: p.username,
+          score: 0
+        })),
+        winner: null,
+        status: matchBracket.bye ? 'completed' : 'pending',
+        startTime: null,
+        endTime: null,
+        gameData: null
+      };
+      
+      // If bye, automatically advance the player
+      if (matchBracket.bye) {
+        match.winner = match.players[0].username;
+        match.endTime = new Date();
+        
+        // Advance player to next round
+        this.advanceToNextRound(tournamentId, roundNumber, match.position, match.winner);
+      }
+      
+      this.matches.push(match);
+    }
+    
+    return this.matches.filter(m => 
+      m.tournamentId === tournamentId && m.roundNumber === roundNumber
+    );
+  }
+  
+  async recordMatchResult(matchId, scores) {
+    const match = this.matches.find(m => m.id === matchId);
+    if (!match) throw new Error("Match not found");
+    
+    // Check if match is already completed
+    if (match.status === 'completed') {
+      throw new Error("Match is already completed");
+    }
+    
+    // Update player scores
+    for (const [username, score] of Object.entries(scores)) {
+      const player = match.players.find(p => p.username === username);
+      if (player) {
+        player.score = score;
+      }
+    }
+    
+    // Determine winner
+    const sortedPlayers = [...match.players].sort((a, b) => b.score - a.score);
+    match.winner = sortedPlayers[0].username;
+    
+    // Mark match as completed
+    match.status = 'completed';
+    match.endTime = new Date();
+    
+    // Get tournament and current round data
+    const tournament = this.tournaments.find(t => t.id === match.tournamentId);
+    
+    // Advance winner to next round
+    this.advanceToNextRound(
+      match.tournamentId,
+      match.roundNumber,
+      match.position,
+      match.winner
+    );
+    
+    // Check if all matches in the round are completed
+    const roundMatches = this.matches.filter(m => 
+      m.tournamentId === match.tournamentId && 
+      m.roundNumber === match.roundNumber
+    );
+    
+    const allCompleted = roundMatches.every(m => m.status === 'completed');
+    
+    if (allCompleted) {
+      // If this is the final round, mark tournament as completed
+      if (match.roundNumber === tournament.brackets.length) {
+        tournament.status = 'completed';
+        tournament.completedAt = new Date();
+        
+        // Award prizes to winners
+        await this.awardTournamentPrizes(tournament.id);
+      } else {
+        // Generate matches for next round
+        this.generateMatches(match.tournamentId, match.roundNumber + 1);
+      }
+    }
+    
+    return {
+      match,
+      nextRound: match.roundNumber < tournament.brackets.length
+    };
+  }
+  
+  advanceToNextRound(tournamentId, currentRound, matchPosition, winnerUsername) {
+    const tournament = this.tournaments.find(t => t.id === tournamentId);
+    if (!tournament) throw new Error("Tournament not found");
+    
+    // Can't advance if this is the final round
+    if (currentRound >= tournament.brackets.length) return;
+    
+    // Find winner's participant data
+    const winner = tournament.participants.find(p => p.username === winnerUsername);
+    if (!winner) throw new Error("Winner not found in tournament participants");
+    
+    // Calculate position in next round
+    const nextRoundPosition = Math.ceil(matchPosition / 2);
+    
+    // Find bracket for next round
+    const nextRoundBracket = tournament.brackets.find(b => b.roundNumber === currentRound + 1);
+    if (!nextRoundBracket) throw new Error("Next round bracket not found");
+    
+    // Find match in next round
+    const nextMatch = nextRoundBracket.matches.find(m => m.position === nextRoundPosition);
+    if (!nextMatch) throw new Error("Next round match not found");
+    
+    // Add winner to next round match
+    nextMatch.participants.push(winner);
+    
+    return nextMatch;
+  }
+  
+  async awardTournamentPrizes(tournamentId) {
+    const tournament = this.tournaments.find(t => t.id === tournamentId);
+    if (!tournament) throw new Error("Tournament not found");
+    
+    // Make sure tournament is completed
+    if (tournament.status !== 'completed') {
+      throw new Error("Tournament is not completed");
+    }
+    
+    // Get final match to determine winner
+    const finalMatch = this.matches.find(m => 
+      m.tournamentId === tournamentId && 
+      m.roundNumber === tournament.brackets.length &&
+      m.status === 'completed'
+    );
+    
+    if (!finalMatch) throw new Error("Final match not found");
+    
+    // Get top 3 players based on tournament progression
+    const topPlayers = [];
+    
+    // 1st place - tournament winner
+    topPlayers.push({
+      username: finalMatch.winner,
+      place: 1
+    });
+    
+    // 2nd place - final match loser
+    const secondPlace = finalMatch.players.find(p => p.username !== finalMatch.winner);
+    if (secondPlace) {
+      topPlayers.push({
+        username: secondPlace.username,
+        place: 2
+      });
+    }
+    
+    // 3rd place - determine through semifinal losers
+    const semiFinalMatches = this.matches.filter(m => 
+      m.tournamentId === tournamentId && 
+      m.roundNumber === tournament.brackets.length - 1 &&
+      m.status === 'completed'
+    );
+    
+    // Sort semifinal losers by score difference to determine 3rd place
+    const semiFinalLosers = semiFinalMatches
+      .map(match => {
+        const loser = match.players.find(p => p.username !== match.winner);
+        if (!loser) return null;
+        
+        const winner = match.players.find(p => p.username === match.winner);
+        const scoreDifference = winner.score - loser.score;
+        
+        return {
+          username: loser.username,
+          scoreDifference
+        };
+      })
+      .filter(Boolean)
+      .sort((a, b) => a.scoreDifference - b.scoreDifference);
+    
+    if (semiFinalLosers.length > 0) {
+      topPlayers.push({
+        username: semiFinalLosers[0].username,
+        place: 3
+      });
+    }
+    
+    // Award prizes
+    for (const player of topPlayers) {
+      const user = this.userAccountSystem.getUser(player.username);
+      if (!user) continue;
+      
+      // Get prize for this place
+      const prize = tournament.prizes[`place${player.place}`];
+      if (!prize) continue;
+      
+      // Award points
+      user.points = user.points || 0;
+      user.points += prize.points || 0;
+      
+      // Award XP
+      user.xp = user.xp || 0;
+      user.xp += prize.xp || 0;
+      
+      // Check for level up
+      this.achievementSystem.checkAndUpdateUserLevel(user);
+      
+      // Track achievement
+      if (player.place === 1) {
+        await this.achievementSystem.trackAchievement(player.username, "WIN_TOURNAMENT", 1);
+      }
+      
+      // Award blockchain tokens if applicable
+      if (prize.tokens && user.isKycVerified && user.walletAddress) {
+        try {
+          await this.blockchainManager.awardTokens(
+            user.walletAddress,
+            prize.tokens,
+            `Tournament Prize: ${tournament.name} - ${player.place}${
+              player.place === 1 ? 'st' : player.place === 2 ? 'nd' : 'rd'
+            } Place`
+          );
+        } catch (error) {
+          console.error("Failed to award blockchain tokens for tournament prize:", error);
+        }
+      } else if (prize.tokens && user.age < 18) {
+        // For underage users, store rewards to be claimed later
+        user.pendingBlockchainRewards = user.pendingBlockchainRewards || [];
+        user.pendingBlockchainRewards.push({
+          amount: prize.tokens,
+          reason: `Tournament Prize: ${tournament.name} - ${player.place}${
+            player.place === 1 ? 'st' : player.place === 2 ? 'nd' : 'rd'
+          } Place`,
+          timestamp: new Date()
+        });
+      }
+      
+      // Award NFT if applicable
+      if (prize.badgeNFT && user.isKycVerified && user.walletAddress) {
+        try {
+          const metadata = {
+            name: `${tournament.name} - ${player.place}${
+              player.place === 1 ? 'st' : player.place === 2 ? 'nd' : 'rd'
+            } Place`,
+            description: `Trophy for placing ${player.place}${
+              player.place === 1 ? 'st' : player.place === 2 ? 'nd' : 'rd'
+            } in the ${tournament.name} tournament.`,
+            image: `https://footballchess.com/trophies/${
+              player.place === 1 ? 'gold' : player.place === 2 ? 'silver' : 'bronze'
+            }.png`,
+            attributes: [
+              { trait_type: "Tournament", value: tournament.name },
+              { trait_type: "Place", value: player.place },
+              { trait_type: "Date", value: tournament.completedAt.toISOString().split('T')[0] },
+              { trait_type: "Rarity", value: player.place === 1 ? "Legendary" : player.place === 2 ? "Epic" : "Rare" }
+            ]
+          };
+          
+          await this.blockchainManager.mintBadgeNFT(
+            user.walletAddress,
+            `trophy_${tournamentId}_${player.place}`,
+            metadata
+          );
+        } catch (error) {
+          console.error("Failed to mint trophy NFT:", error);
+        }
+      }
+      
+      // Save user updates
+      this.userAccountSystem.updateUser(user);
+    }
+    
+    return {
+      success: true,
+      winners: topPlayers
+    };
+  }
+  
+  getTournamentDetails(tournamentId) {
+    const tournament = this.tournaments.find(t => t.id === tournamentId);
+    if (!tournament) throw new Error("Tournament not found");
+    
+    // Get all matches for this tournament
+    const tournamentMatches = this.matches.filter(m => m.tournamentId === tournamentId);
+    
+    return {
+      ...tournament,
+      matches: tournamentMatches
+    };
+  }
+  
+  getUserTournaments(username) {
+    const user = this.userAccountSystem.getUser(username);
+    if (!user) throw new Error("User not found");
+    
+    // Find all tournaments user participated in
+    const userTournaments = this.tournaments.filter(t => 
+      t.participants.some(p => p.username === username)
+    );
+    
+    //
