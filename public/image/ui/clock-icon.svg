@@ -1,0 +1,26 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24">
+  <!-- Clock circle -->
+  <circle cx="12" cy="12" r="10" fill="#fff" stroke="#ffb142" stroke-width="2"/>
+  
+  <!-- Clock hands -->
+  <line x1="12" y1="12" x2="12" y2="6" stroke="#ffb142" stroke-width="2" stroke-linecap="round"/>
+  <line x1="12" y1="12" x2="16" y2="14" stroke="#ffb142" stroke-width="2" stroke-linecap="round"/>
+  
+  <!-- Clock center dot -->
+  <circle cx="12" cy="12" r="1.5" fill="#ffb142"/>
+  
+  <!-- Decorative marks at hours -->
+  <line x1="12" y1="3" x2="12" y2="4" stroke="#ffb142" stroke-width="1.5"/>
+  <line x1="12" y1="20" x2="12" y2="21" stroke="#ffb142" stroke-width="1.5"/>
+  <line x1="3" y1="12" x2="4" y2="12" stroke="#ffb142" stroke-width="1.5"/>
+  <line x1="20" y1="12" x2="21" y2="12" stroke="#ffb142" stroke-width="1.5"/>
+  
+  <!-- Diagonal marks -->
+  <line x1="6.5" y1="6.5" x2="7.5" y2="7.5" stroke="#ffb142" stroke-width="1.5"/>
+  <line x1="16.5" y1="16.5" x2="17.5" y2="17.5" stroke="#ffb142" stroke-width="1.5"/>
+  <line x1="6.5" y1="17.5" x2="7.5" y2="16.5" stroke="#ffb142" stroke-width="1.5"/>
+  <line x1="16.5" y1="7.5" x2="17.5" y2="6.5" stroke="#ffb142" stroke-width="1.5"/>
+  
+  <!-- Shine effect -->
+  <path d="M8,4 A8,8 0 0,1 16,12" fill="none" stroke="white" stroke-width="1" opacity="0.6"/>
+</svg>

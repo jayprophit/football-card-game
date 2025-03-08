@@ -1,0 +1,384 @@
+{
+  "players": [
+    {
+      "id": "p001",
+      "name": "Alisson Becker",
+      "position": "GK",
+      "number": 1,
+      "attributes": {
+        "pace": 65,
+        "shooting": 15,
+        "passing": 75,
+        "dribbling": 50,
+        "defending": 90,
+        "physical": 85
+      },
+      "team": "Liverpool",
+      "nationality": "Brazil",
+      "rarity": "rare",
+      "overall": 89,
+      "specialAbilities": ["Goalkeeper Reflexes", "Long Throw"]
+    },
+    {
+      "id": "p002",
+      "name": "Virgil van Dijk",
+      "position": "CB",
+      "number": 4,
+      "attributes": {
+        "pace": 78,
+        "shooting": 60,
+        "passing": 72,
+        "dribbling": 70,
+        "defending": 92,
+        "physical": 90
+      },
+      "team": "Liverpool",
+      "nationality": "Netherlands",
+      "rarity": "epic",
+      "overall": 90,
+      "specialAbilities": ["Leader", "Aerial Duels"]
+    },
+    {
+      "id": "p003",
+      "name": "Kevin De Bruyne",
+      "position": "CM",
+      "number": 17,
+      "attributes": {
+        "pace": 76,
+        "shooting": 88,
+        "passing": 94,
+        "dribbling": 88,
+        "defending": 65,
+        "physical": 75
+      },
+      "team": "Manchester City",
+      "nationality": "Belgium",
+      "rarity": "legendary",
+      "overall": 91,
+      "specialAbilities": ["Playmaker", "Long Shots", "Through Balls"]
+    },
+    {
+      "id": "p004",
+      "name": "Erling Haaland",
+      "position": "ST",
+      "number": 9,
+      "attributes": {
+        "pace": 89,
+        "shooting": 93,
+        "passing": 70,
+        "dribbling": 80,
+        "defending": 50,
+        "physical": 91
+      },
+      "team": "Manchester City",
+      "nationality": "Norway",
+      "rarity": "legendary",
+      "overall": 92,
+      "specialAbilities": ["Finisher", "Power Header", "Speed Dribbler"]
+    },
+    {
+      "id": "p005",
+      "name": "Lionel Messi",
+      "position": "RW",
+      "number": 30,
+      "attributes": {
+        "pace": 85,
+        "shooting": 92,
+        "passing": 95,
+        "dribbling": 98,
+        "defending": 40,
+        "physical": 68
+      },
+      "team": "Inter Miami",
+      "nationality": "Argentina",
+      "rarity": "legendary",
+      "overall": 93,
+      "specialAbilities": ["Dribbler", "Free Kick Specialist", "Magician"]
+    },
+    {
+      "id": "p006",
+      "name": "Kylian Mbappé",
+      "position": "ST",
+      "number": 7,
+      "attributes": {
+        "pace": 97,
+        "shooting": 90,
+        "passing": 82,
+        "dribbling": 92,
+        "defending": 40,
+        "physical": 80
+      },
+      "team": "Real Madrid",
+      "nationality": "France",
+      "rarity": "legendary",
+      "overall": 92,
+      "specialAbilities": ["Speedster", "Clinical Finisher"]
+    },
+    {
+      "id": "p007",
+      "name": "Trent Alexander-Arnold",
+      "position": "RB",
+      "number": 66,
+      "attributes": {
+        "pace": 79,
+        "shooting": 70,
+        "passing": 90,
+        "dribbling": 81,
+        "defending": 80,
+        "physical": 72
+      },
+      "team": "Liverpool",
+      "nationality": "England",
+      "rarity": "epic",
+      "overall": 87,
+      "specialAbilities": ["Crosser", "Playmaker"]
+    },
+    {
+      "id": "p008",
+      "name": "N'Golo Kanté",
+      "position": "CDM",
+      "number": 7,
+      "attributes": {
+        "pace": 80,
+        "shooting": 65,
+        "passing": 78,
+        "dribbling": 79,
+        "defending": 89,
+        "physical": 85
+      },
+      "team": "Al-Ittihad",
+      "nationality": "France",
+      "rarity": "epic",
+      "overall": 87,
+      "specialAbilities": ["Ball Winner", "Tireless Runner"]
+    },
+    {
+      "id": "p009",
+      "name": "Rodri",
+      "position": "CDM",
+      "number": 16,
+      "attributes": {
+        "pace": 70,
+        "shooting": 75,
+        "passing": 85,
+        "dribbling": 80,
+        "defending": 87,
+        "physical": 84
+      },
+      "team": "Manchester City",
+      "nationality": "Spain",
+      "rarity": "epic",
+      "overall": 88,
+      "specialAbilities": ["Tackler", "Distributor"]
+    },
+    {
+      "id": "p010",
+      "name": "Mohamed Salah",
+      "position": "RW",
+      "number": 11,
+      "attributes": {
+        "pace": 90,
+        "shooting": 89,
+        "passing": 83,
+        "dribbling": 90,
+        "defending": 45,
+        "physical": 78
+      },
+      "team": "Liverpool",
+      "nationality": "Egypt",
+      "rarity": "legendary",
+      "overall": 90,
+      "specialAbilities": ["Winger", "Inside Forward", "Speedster"]
+    },
+    {
+      "id": "p011",
+      "name": "Jude Bellingham",
+      "position": "CM",
+      "number": 5,
+      "attributes": {
+        "pace": 80,
+        "shooting": 83,
+        "passing": 85,
+        "dribbling": 85,
+        "defending": 79,
+        "physical": 82
+      },
+      "team": "Real Madrid",
+      "nationality": "England",
+      "rarity": "epic",
+      "overall": 88,
+      "specialAbilities": ["Complete Midfielder", "Box to Box"]
+    },
+    {
+      "id": "p012",
+      "name": "David De Gea",
+      "position": "GK",
+      "number": 1,
+      "attributes": {
+        "pace": 58,
+        "shooting": 12,
+        "passing": 70,
+        "dribbling": 45,
+        "defending": 88,
+        "physical": 78
+      },
+      "team": "Free Agent",
+      "nationality": "Spain",
+      "rarity": "rare",
+      "overall": 86,
+      "specialAbilities": ["Shot Stopper", "Reflexes"]
+    },
+    {
+      "id": "p013",
+      "name": "Vinicius Jr.",
+      "position": "LW",
+      "number": 7,
+      "attributes": {
+        "pace": 95,
+        "shooting": 85,
+        "passing": 80,
+        "dribbling": 93,
+        "defending": 30,
+        "physical": 75
+      },
+      "team": "Real Madrid",
+      "nationality": "Brazil",
+      "rarity": "legendary",
+      "overall": 91,
+      "specialAbilities": ["Dribbler", "Speedster", "Flair"]
+    },
+    {
+      "id": "p014",
+      "name": "Bukayo Saka",
+      "position": "RW",
+      "number": 7,
+      "attributes": {
+        "pace": 87,
+        "shooting": 82,
+        "passing": 82,
+        "dribbling": 88,
+        "defending": 70,
+        "physical": 76
+      },
+      "team": "Arsenal",
+      "nationality": "England",
+      "rarity": "epic",
+      "overall": 87,
+      "specialAbilities": ["Dribbler", "Inside Forward"]
+    },
+    {
+      "id": "p015",
+      "name": "Martin Ødegaard",
+      "position": "CAM",
+      "number": 8,
+      "attributes": {
+        "pace": 75,
+        "shooting": 80,
+        "passing": 90,
+        "dribbling": 88,
+        "defending": 65,
+        "physical": 70
+      },
+      "team": "Arsenal",
+      "nationality": "Norway",
+      "rarity": "epic",
+      "overall": 88,
+      "specialAbilities": ["Playmaker", "Vision", "Free Kick Specialist"]
+    },
+    {
+      "id": "p016",
+      "name": "Harry Kane",
+      "position": "ST",
+      "number": 9,
+      "attributes": {
+        "pace": 73,
+        "shooting": 93,
+        "passing": 87,
+        "dribbling": 83,
+        "defending": 55,
+        "physical": 83
+      },
+      "team": "Bayern Munich",
+      "nationality": "England",
+      "rarity": "legendary",
+      "overall": 90,
+      "specialAbilities": ["Finisher", "Long Shots", "Passing"]
+    },
+    {
+      "id": "p017",
+      "name": "Ederson",
+      "position": "GK",
+      "number": 31,
+      "attributes": {
+        "pace": 70,
+        "shooting": 20,
+        "passing": 85,
+        "dribbling": 65,
+        "defending": 88,
+        "physical": 80
+      },
+      "team": "Manchester City",
+      "nationality": "Brazil",
+      "rarity": "epic",
+      "overall": 88,
+      "specialAbilities": ["Sweeper Keeper", "Distribution"]
+    },
+    {
+      "id": "p018",
+      "name": "Rúben Dias",
+      "position": "CB",
+      "number": 3,
+      "attributes": {
+        "pace": 75,
+        "shooting": 55,
+        "passing": 75,
+        "dribbling": 72,
+        "defending": 90,
+        "physical": 87
+      },
+      "team": "Manchester City",
+      "nationality": "Portugal",
+      "rarity": "epic",
+      "overall": 89,
+      "specialAbilities": ["Leader", "Tackler", "Positioning"]
+    },
+    {
+      "id": "p019",
+      "name": "Bruno Fernandes",
+      "position": "CAM",
+      "number": 8,
+      "attributes": {
+        "pace": 76,
+        "shooting": 87,
+        "passing": 92,
+        "dribbling": 86,
+        "defending": 70,
+        "physical": 78
+      },
+      "team": "Manchester United",
+      "nationality": "Portugal",
+      "rarity": "epic",
+      "overall": 88,
+      "specialAbilities": ["Playmaker", "Long Shots", "Set Pieces"]
+    },
+    {
+      "id": "p020",
+      "name": "Joshua Kimmich",
+      "position": "CDM",
+      "number": 6,
+      "attributes": {
+        "pace": 75,
+        "shooting": 75,
+        "passing": 90,
+        "dribbling": 83,
+        "defending": 85,
+        "physical": 82
+      },
+      "team": "Bayern Munich",
+      "nationality": "Germany",
+      "rarity": "epic",
+      "overall": 89,
+      "specialAbilities": ["Distributor", "Tactician", "Versatile"]
+    }
+  ]
+}

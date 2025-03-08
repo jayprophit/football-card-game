@@ -1,0 +1,18 @@
+# Environment Variables
+
+# Development mode
+NODE_ENV=development
+
+# Application
+PORT=1234
+PUBLIC_URL=/
+
+# Feature flags
+ENABLE_CAMERA_UPLOAD=true
+ENABLE_CUSTOM_TEAMS=true
+ENABLE_MULTIPLAYER=false
+ENABLE_AI_OPPONENT=false
+
+# Game settings
+DEFAULT_GAME_DURATION=20
+MAX_PLAYERS_PER_TEAM=11

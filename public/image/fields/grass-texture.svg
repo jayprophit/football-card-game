@@ -1,0 +1,192 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="256" height="256" viewBox="0 0 256 256">
+  <!-- Base green grass background -->
+  <rect width="256" height="256" fill="#4caf50"/>
+  
+  <!-- Darker grass texture (pattern) -->
+  <g fill="#388e3c" opacity="0.7">
+    <!-- Random grass blades pattern -->
+    <g transform="translate(0, 0)">
+      <path d="M10,10 L15,2 M20,15 L22,5 M5,20 L8,12 M25,25 L28,18 M15,30 L20,22"/>
+    </g>
+    <g transform="translate(30, 10)">
+      <path d="M10,10 L15,2 M20,15 L22,5 M5,20 L8,12 M25,25 L28,18 M15,30 L20,22"/>
+    </g>
+    <g transform="translate(60, 20)">
+      <path d="M10,10 L15,2 M20,15 L22,5 M5,20 L8,12 M25,25 L28,18 M15,30 L20,22"/>
+    </g>
+    <g transform="translate(90, 5)">
+      <path d="M10,10 L15,2 M20,15 L22,5 M5,20 L8,12 M25,25 L28,18 M15,30 L20,22"/>
+    </g>
+    <g transform="translate(120, 15)">
+      <path d="M10,10 L15,2 M20,15 L22,5 M5,20 L8,12 M25,25 L28,18 M15,30 L20,22"/>
+    </g>
+    <g transform="translate(150, 25)">
+      <path d="M10,10 L15,2 M20,15 L22,5 M5,20 L8,12 M25,25 L28,18 M15,30 L20,22"/>
+    </g>
+    <g transform="translate(180, 8)">
+      <path d="M10,10 L15,2 M20,15 L22,5 M5,20 L8,12 M25,25 L28,18 M15,30 L20,22"/>
+    </g>
+    <g transform="translate(210, 18)">
+      <path d="M10,10 L15,2 M20,15 L22,5 M5,20 L8,12 M25,25 L28,18 M15,30 L20,22"/>
+    </g>
+    
+    <!-- More patterns in other rows -->
+    <g transform="translate(15, 50)">
+      <path d="M10,10 L15,2 M20,15 L22,5 M5,20 L8,12 M25,25 L28,18 M15,30 L20,22"/>
+    </g>
+    <g transform="translate(45, 65)">
+      <path d="M10,10 L15,2 M20,15 L22,5 M5,20 L8,12 M25,25 L28,18 M15,30 L20,22"/>
+    </g>
+    <g transform="translate(75, 55)">
+      <path d="M10,10 L15,2 M20,15 L22,5 M5,20 L8,12 M25,25 L28,18 M15,30 L20,22"/>
+    </g>
+    <g transform="translate(105, 70)">
+      <path d="M10,10 L15,2 M20,15 L22,5 M5,20 L8,12 M25,25 L28,18 M15,30 L20,22"/>
+    </g>
+    <g transform="translate(135, 50)">
+      <path d="M10,10 L15,2 M20,15 L22,5 M5,20 L8,12 M25,25 L28,18 M15,30 L20,22"/>
+    </g>
+    <g transform="translate(165, 60)">
+      <path d="M10,10 L15,2 M20,15 L22,5 M5,20 L8,12 M25,25 L28,18 M15,30 L20,22"/>
+    </g>
+    <g transform="translate(195, 50)">
+      <path d="M10,10 L15,2 M20,15 L22,5 M5,20 L8,12 M25,25 L28,18 M15,30 L20,22"/>
+    </g>
+    <g transform="translate(225, 65)">
+      <path d="M10,10 L15,2 M20,15 L22,5 M5,20 L8,12 M25,25 L28,18 M15,30 L20,22"/>
+    </g>
+    
+    <!-- Continue pattern throughout the texture -->
+    <g transform="translate(10, 100)">
+      <path d="M10,10 L15,2 M20,15 L22,5 M5,20 L8,12 M25,25 L28,18 M15,30 L20,22"/>
+    </g>
+    <g transform="translate(40, 110)">
+      <path d="M10,10 L15,2 M20,15 L22,5 M5,20 L8,12 M25,25 L28,18 M15,30 L20,22"/>
+    </g>
+    <g transform="translate(70, 95)">
+      <path d="M10,10 L15,2 M20,15 L22,5 M5,20 L8,12 M25,25 L28,18 M15,30 L20,22"/>
+    </g>
+    <g transform="translate(100, 105)">
+      <path d="M10,10 L15,2 M20,15 L22,5 M5,20 L8,12 M25,25 L28,18 M15,30 L20,22"/>
+    </g>
+    <g transform="translate(130, 115)">
+      <path d="M10,10 L15,2 M20,15 L22,5 M5,20 L8,12 M25,25 L28,18 M15,30 L20,22"/>
+    </g>
+    <g transform="translate(160, 100)">
+      <path d="M10,10 L15,2 M20,15 L22,5 M5,20 L8,12 M25,25 L28,18 M15,30 L20,22"/>
+    </g>
+    <g transform="translate(190, 110)">
+      <path d="M10,10 L15,2 M20,15 L22,5 M5,20 L8,12 M25,25 L28,18 M15,30 L20,22"/>
+    </g>
+    <g transform="translate(220, 95)">
+      <path d="M10,10 L15,2 M20,15 L22,5 M5,20 L8,12 M25,25 L28,18 M15,30 L20,22"/>
+    </g>
+    
+    <!-- And more rows -->
+    <g transform="translate(20, 150)">
+      <path d="M10,10 L15,2 M20,15 L22,5 M5,20 L8,12 M25,25 L28,18 M15,30 L20,22"/>
+    </g>
+    <g transform="translate(50, 145)">
+      <path d="M10,10 L15,2 M20,15 L22,5 M5,20 L8,12 M25,25 L28,18 M15,30 L20,22"/>
+    </g>
+    <g transform="translate(80, 155)">
+      <path d="M10,10 L15,2 M20,15 L22,5 M5,20 L8,12 M25,25 L28,18 M15,30 L20,22"/>
+    </g>
+    <g transform="translate(110, 140)">
+      <path d="M10,10 L15,2 M20,15 L22,5 M5,20 L8,12 M25,25 L28,18 M15,30 L20,22"/>
+    </g>
+    <g transform="translate(140, 160)">
+      <path d="M10,10 L15,2 M20,15 L22,5 M5,20 L8,12 M25,25 L28,18 M15,30 L20,22"/>
+    </g>
+    <g transform="translate(170, 145)">
+      <path d="M10,10 L15,2 M20,15 L22,5 M5,20 L8,12 M25,25 L28,18 M15,30 L20,22"/>
+    </g>
+    <g transform="translate(200, 155)">
+      <path d="M10,10 L15,2 M20,15 L22,5 M5,20 L8,12 M25,25 L28,18 M15,30 L20,22"/>
+    </g>
+    <g transform="translate(230, 160)">
+      <path d="M10,10 L15,2 M20,15 L22,5 M5,20 L8,12 M25,25 L28,18 M15,30 L20,22"/>
+    </g>
+    
+    <!-- Final row -->
+    <g transform="translate(5, 200)">
+      <path d="M10,10 L15,2 M20,15 L22,5 M5,20 L8,12 M25,25 L28,18 M15,30 L20,22"/>
+    </g>
+    <g transform="translate(35, 205)">
+      <path d="M10,10 L15,2 M20,15 L22,5 M5,20 L8,12 M25,25 L28,18 M15,30 L20,22"/>
+    </g>
+    <g transform="translate(65, 210)">
+      <path d="M10,10 L15,2 M20,15 L22,5 M5,20 L8,12 M25,25 L28,18 M15,30 L20,22"/>
+    </g>
+    <g transform="translate(95, 200)">
+      <path d="M10,10 L15,2 M20,15 L22,5 M5,20 L8,12 M25,25 L28,18 M15,30 L20,22"/>
+    </g>
+    <g transform="translate(125, 195)">
+      <path d="M10,10 L15,2 M20,15 L22,5 M5,20 L8,12 M25,25 L28,18 M15,30 L20,22"/>
+    </g>
+    <g transform="translate(155, 205)">
+      <path d="M10,10 L15,2 M20,15 L22,5 M5,20 L8,12 M25,25 L28,18 M15,30 L20,22"/>
+    </g>
+    <g transform="translate(185, 210)">
+      <path d="M10,10 L15,2 M20,15 L22,5 M5,20 L8,12 M25,25 L28,18 M15,30 L20,22"/>
+    </g>
+    <g transform="translate(215, 200)">
+      <path d="M10,10 L15,2 M20,15 L22,5 M5,20 L8,12 M25,25 L28,18 M15,30 L20,22"/>
+    </g>
+  </g>
+  
+  <!-- Lighter grass highlights -->
+  <g fill="#66bb6a" opacity="0.3">
+    <circle cx="20" cy="30" r="2" />
+    <circle cx="50" cy="25" r="1.5" />
+    <circle cx="80" cy="40" r="2" />
+    <circle cx="110" cy="20" r="1.5" />
+    <circle cx="140" cy="35" r="2" />
+    <circle cx="170" cy="25" r="1.5" />
+    <circle cx="200" cy="40" r="2" />
+    <circle cx="230" cy="30" r="1.5" />
+    
+    <circle cx="30" cy="70" r="2" />
+    <circle cx="60" cy="85" r="1.5" />
+    <circle cx="90" cy="75" r="2" />
+    <circle cx="120" cy="90" r="1.5" />
+    <circle cx="150" cy="70" r="2" />
+    <circle cx="180" cy="80" r="1.5" />
+    <circle cx="210" cy="70" r="2" />
+    <circle cx="240" cy="85" r="1.5" />
+    
+    <circle cx="25" cy="120" r="2" />
+    <circle cx="55" cy="130" r="1.5" />
+    <circle cx="85" cy="115" r="2" />
+    <circle cx="115" cy="125" r="1.5" />
+    <circle cx="145" cy="135" r="2" />
+    <circle cx="175" cy="120" r="1.5" />
+    <circle cx="205" cy="130" r="2" />
+    <circle cx="235" cy="115" r="1.5" />
+    
+    <circle cx="35" cy="170" r="2" />
+    <circle cx="65" cy="165" r="1.5" />
+    <circle cx="95" cy="175" r="2" />
+    <circle cx="125" cy="160" r="1.5" />
+    <circle cx="155" cy="180" r="2" />
+    <circle cx="185" cy="165" r="1.5" />
+    <circle cx="215" cy="175" r="2" />
+    <circle cx="245" cy="180" r="1.5" />
+    
+    <circle cx="20" cy="220" r="2" />
+    <circle cx="50" cy="225" r="1.5" />
+    <circle cx="80" cy="230" r="2" />
+    <circle cx="110" cy="220" r="1.5" />
+    <circle cx="140" cy="215" r="2" />
+    <circle cx="170" cy="225" r="1.5" />
+    <circle cx="200" cy="230" r="2" />
+    <circle cx="230" cy="220" r="1.5" />
+  </g>
+  
+  <!-- Subtle noise pattern for texture variation -->
+  <filter id="noise">
+    <feTurbulence type="fractalNoise" baseFrequency="0.65" numOctaves="3" stitchTiles="stitch" />
+    <feColorMatrix type="matrix" values="0 0 0 0 0, 0 0 0 0 0, 0 0 0 0 0, 0 0 0 0.1 0" />
+  </filter>
+  <rect width="256" height="256" filter="url(#noise)" opacity="0.2" />
+</svg>

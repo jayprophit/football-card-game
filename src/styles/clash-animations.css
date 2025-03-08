@@ -1,0 +1,360 @@
+/* Clash of Clans inspired animations */
+
+/* Main menu animations */
+.clash-logo {
+  animation: clash-bounce-in 1s ease-out;
+}
+
+.clash-menu-buttons {
+  animation: clash-fade-up 0.8s ease-out 0.3s both;
+}
+
+.clash-footer {
+  animation: clash-fade-in 1s ease-out 0.6s both;
+}
+
+@keyframes clash-bounce-in {
+  0% { transform: scale(0.1); opacity: 0; }
+  60% { transform: scale(1.2); opacity: 1; }
+  80% { transform: scale(0.9); }
+  100% { transform: scale(1); }
+}
+
+@keyframes clash-fade-up {
+  0% { transform: translateY(20px); opacity: 0; }
+  100% { transform: translateY(0); opacity: 1; }
+}
+
+@keyframes clash-fade-in {
+  0% { opacity: 0; }
+  100% { opacity: 1; }
+}
+
+/* Button press animations */
+.clash-btn {
+  transition: transform 0.15s ease, box-shadow 0.15s ease, top 0.15s ease;
+}
+
+.clash-btn:active {
+  animation: clash-btn-press 0.15s ease forwards;
+}
+
+@keyframes clash-btn-press {
+  0% { 
+    transform: scale(1); 
+    box-shadow: 0 3px 0 #d35400, 0 4px 6px rgba(0,0,0,0.4);
+    top: 0;
+  }
+  100% { 
+    transform: scale(0.95); 
+    box-shadow: 0 0 0 #d35400, 0 1px 2px rgba(0,0,0,0.4);
+    top: 3px;
+  }
+}
+
+/* Card hover animations */
+.clash-player-card {
+  transition: all 0.2s ease;
+}
+
+.clash-player-card:hover {
+  transform: scale(1.05);
+  z-index: 2;
+}
+
+.clash-player-card:hover .clash-player-avatar {
+  box-shadow: 0 0 15px rgba(255, 177, 66, 0.7);
+}
+
+/* Upgrade animations */
+.clash-upgrade-panel {
+  animation: clash-scale-bounce 0.5s ease-out;
+}
+
+.clash-upgrade-option {
+  transition: all 0.2s ease;
+}
+
+.clash-upgrade-option:hover {
+  transform: scale(1.1);
+}
+
+.clash-upgrade-option:hover .clash-upgrade-icon {
+  animation: clash-glow-pulse 1.5s infinite;
+}
+
+@keyframes clash-scale-bounce {
+  0% { transform: scale(0.5); opacity: 0; }
+  70% { transform: scale(1.1); opacity: 1; }
+  100% { transform: scale(1); opacity: 1; }
+}
+
+@keyframes clash-glow-pulse {
+  0%, 100% { box-shadow: 0 0 5px 2px rgba(255, 177, 66, 0.7); }
+  50% { box-shadow: 0 0 15px 5px rgba(255, 177, 66, 0.9); }
+}
+
+/* Game log animation */
+.clash-log-entry {
+  animation: clash-slide-in 0.3s ease-out;
+}
+
+@keyframes clash-slide-in {
+  0% { transform: translateX(-20px); opacity: 0; }
+  100% { transform: translateX(0); opacity: 1; }
+}
+
+/* Goal celebration animations */
+.clash-goal-text {
+  animation: clash-goal-explosion 2s ease-out;
+  text-shadow: 0 0 10px gold, 0 0 20px orange, 0 0 30px red;
+}
+
+@keyframes clash-goal-explosion {
+  0% { transform: scale(0.1); opacity: 0; filter: blur(10px); }
+  40% { transform: scale(1.4); opacity: 1; filter: blur(0); }
+  60% { transform: scale(1); }
+  80% { transform: scale(1.1); }
+  100% { transform: scale(1); }
+}
+
+/* Environment change animations */
+.clash-env-btn {
+  transition: transform 0.3s ease, background-color 0.3s ease;
+}
+
+.clash-env-btn:hover {
+  transform: scale(1.15);
+  background-color: rgba(0, 0, 0, 0.8);
+}
+
+.clash-env-btn:active {
+  transform: scale(0.9);
+}
+
+/* Player animation indicators */
+.clash-player-animating {
+  position: relative;
+}
+
+.clash-player-animating::after {
+  content: "";
+  position: absolute;
+  top: -10px;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 30px;
+  height: 3px;
+  background-color: #ffb142;
+  border-radius: 3px;
+  animation: clash-pulse-width 1s infinite;
+}
+
+@keyframes clash-pulse-width {
+  0%, 100% { width: 30px; opacity: 0.7; }
+  50% { width: 50px; opacity: 1; }
+}
+
+/* Passing animation */
+.clash-passing-indicator {
+  position: absolute;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background-color: white;
+  box-shadow: 0 0 10px 2px rgba(255, 177, 66, 0.8);
+  z-index: 10;
+  pointer-events: none;
+}
+
+.clash-passing-trail {
+  position: absolute;
+  height: 3px;
+  background: linear-gradient(to right, rgba(255, 177, 66, 0.8), rgba(255, 255, 255, 0.6));
+  border-radius: 3px;
+  transform-origin: left center;
+  z-index: 9;
+  pointer-events: none;
+}
+
+/* Shine effects */
+.clash-card-shine {
+  position: absolute;
+  top: 0;
+  left: -100%;
+  width: 50%;
+  height: 100%;
+  background: linear-gradient(
+    to right,
+    rgba(255, 255, 255, 0) 0%,
+    rgba(255, 255, 255, 0.3) 50%,
+    rgba(255, 255, 255, 0) 100%
+  );
+  transform: skewX(-25deg);
+  animation: clash-card-shine 3s infinite;
+}
+
+@keyframes clash-card-shine {
+  0% { left: -100%; }
+  100% { left: 200%; }
+}
+
+/* Special effect animations */
+.clash-special-effect {
+  position: absolute;
+  pointer-events: none;
+  z-index: 100;
+}
+
+.clash-effect-goal {
+  animation: clash-effect-goal 2s forwards;
+}
+
+.clash-effect-tackle {
+  animation: clash-effect-tackle 1s forwards;
+}
+
+.clash-effect-card {
+  animation: clash-effect-card 1.5s forwards;
+}
+
+.clash-effect-upgrade {
+  animation: clash-effect-upgrade 3s infinite;
+}
+
+@keyframes clash-effect-goal {
+  0% { transform: scale(0) rotate(0deg); opacity: 0; }
+  30% { transform: scale(1.2) rotate(10deg); opacity: 1; }
+  80% { transform: scale(1) rotate(0deg); opacity: 1; }
+  100% { transform: scale(0.8) rotate(0deg); opacity: 0; }
+}
+
+@keyframes clash-effect-tackle {
+  0% { transform: scale(0.5); opacity: 0; }
+  30% { transform: scale(1.2); opacity: 1; }
+  100% { transform: scale(0.8); opacity: 0; }
+}
+
+@keyframes clash-effect-card {
+  0% { transform: translateY(-20px) scale(0.8); opacity: 0; }
+  30% { transform: translateY(0) scale(1); opacity: 1; }
+  70% { transform: translateY(0) scale(1); opacity: 1; }
+  100% { transform: translateY(10px) scale(0.9); opacity: 0; }
+}
+
+@keyframes clash-effect-upgrade {
+  0% { transform: scale(1) translateY(0); opacity: 1; }
+  50% { transform: scale(1.1) translateY(-5px); opacity: 1; }
+  100% { transform: scale(1) translateY(0); opacity: 1; }
+}
+
+/* Weather effects */
+.clash-rain-drop {
+  position: absolute;
+  width: 2px;
+  height: 15px;
+  background-color: rgba(120, 180, 255, 0.5);
+  transform: rotate(20deg);
+}
+
+.clash-snow-flake {
+  position: absolute;
+  width: 4px;
+  height: 4px;
+  border-radius: 50%;
+  background-color: white;
+  opacity: 0.7;
+}
+
+.clash-fog {
+  position: absolute;
+  background: linear-gradient(
+    to bottom,
+    rgba(255, 255, 255, 0) 0%,
+    rgba(200, 200, 200, 0.3) 50%,
+    rgba(255, 255, 255, 0) 100%
+  );
+  border-radius: 50%;
+  opacity: 0.5;
+  filter: blur(8px);
+}
+
+/* Loading animations */
+.clash-loading-bar {
+  position: relative;
+  overflow: hidden;
+}
+
+.clash-loading-bar::after {
+  content: "";
+  position: absolute;
+  top: 0;
+  left: -100%;
+  width: 50%;
+  height: 100%;
+  background: linear-gradient(
+    to right,
+    rgba(255, 255, 255, 0) 0%,
+    rgba(255, 255, 255, 0.5) 50%,
+    rgba(255, 255, 255, 0) 100%
+  );
+  animation: clash-loading-shine 2s infinite;
+}
+
+@keyframes clash-loading-shine {
+  0% { left: -100%; }
+  100% { left: 200%; }
+}
+
+/* Modal animations */
+.clash-modal-overlay {
+  animation: clash-fade-in 0.3s ease-out;
+}
+
+.clash-modal-content {
+  animation: clash-modal-in 0.5s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+}
+
+@keyframes clash-modal-in {
+  0% { transform: scale(0.8) translateY(30px); opacity: 0; }
+  100% { transform: scale(1) translateY(0); opacity: 1; }
+}
+
+/* Formation selector animations */
+.clash-formation-option {
+  transition: all 0.2s ease;
+}
+
+.clash-formation-option:hover {
+  transform: scale(1.05);
+  background-color: rgba(255, 177, 66, 0.2);
+}
+
+.clash-formation-option.clash-selected {
+  background-color: rgba(255, 177, 66, 0.3);
+  border-color: #ffb142;
+  box-shadow: 0 0 10px rgba(255, 177, 66, 0.5);
+}
+
+/* Team setup animations */
+.clash-team-badge {
+  animation: clash-rotate-pulse 3s infinite;
+}
+
+@keyframes clash-rotate-pulse {
+  0% { transform: scale(1) rotate(0deg); }
+  25% { transform: scale(1.05) rotate(5deg); }
+  50% { transform: scale(1) rotate(0deg); }
+  75% { transform: scale(1.05) rotate(-5deg); }
+  100% { transform: scale(1) rotate(0deg); }
+}
+
+/* Player card level indicator animation */
+.clash-card-level {
+  animation: clash-level-pulse 2s infinite;
+}
+
+@keyframes clash-level-pulse {
+  0%, 100% { transform: scale(1); box-shadow: 0 0 5px rgba(255, 255, 255, 0.5); }
+  50% { transform: scale(1.1); box-shadow: 0 0 8px rgba(255, 255, 255, 0.7); }
+}

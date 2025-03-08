@@ -1,0 +1,18 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24">
+  <!-- Main coin body -->
+  <circle cx="12" cy="12" r="10" fill="#ffb142"/>
+  <circle cx="12" cy="12" r="8" fill="#f39c12"/>
+  
+  <!-- Inner design -->
+  <circle cx="12" cy="12" r="6" fill="#e67e22" opacity="0.7"/>
+  <circle cx="12" cy="12" r="3" fill="#ffb142"/>
+  
+  <!-- Shine effect -->
+  <path d="M8,6 A6,6 0 0,1 16,10" fill="none" stroke="white" stroke-width="1.5" opacity="0.8"/>
+  
+  <!-- Edge details -->
+  <path d="M12,2 A10,10 0 0,1 22,12 A10,10 0 0,1 12,22 A10,10 0 0,1 2,12 A10,10 0 0,1 12,2 Z" fill="none" stroke="#e67e22" stroke-width="0.5"/>
+  
+  <!-- Coin edge notches -->
+  <path d="M12,2 L12,4 M16,2.6 L15.5,4.4 M19.4,5 L18.4,6.4 M21.4,8.6 L20,9.4 M22,12 L20,12 M21.4,15.4 L20,14.6 M19.4,19 L18.4,17.6 M16,21.4 L15.5,19.6 M12,22 L12,20 M8,21.4 L8.5,19.6 M4.6,19 L5.6,17.6 M2.6,15.4 L4,14.6 M2,12 L4,12 M2.6,8.6 L4,9.4 M4.6,5 L5.6,6.4 M8,2.6 L8.5,4.4" stroke="#e67e22" stroke-width="0.5"/>
+</svg>

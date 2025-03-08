@@ -1,0 +1,318 @@
+{
+  "teams": [
+    {
+      "id": "t001",
+      "name": "Liverpool FC",
+      "shortName": "LIV",
+      "colors": {
+        "primary": "#C8102E",
+        "secondary": "#FFFFFF",
+        "tertiary": "#00B2A9"
+      },
+      "logo": "liverpool.png",
+      "formation": "4-3-3",
+      "rarity": "legendary",
+      "players": [
+        "p001", "p002", "p007", "p010"
+      ]
+    },
+    {
+      "id": "t002",
+      "name": "Manchester City",
+      "shortName": "MCI",
+      "colors": {
+        "primary": "#6CABDD",
+        "secondary": "#FFFFFF",
+        "tertiary": "#1C2C5B"
+      },
+      "logo": "mancity.png",
+      "formation": "4-3-3",
+      "rarity": "legendary",
+      "players": [
+        "p003", "p004", "p009", "p017", "p018"
+      ]
+    },
+    {
+      "id": "t003",
+      "name": "Real Madrid",
+      "shortName": "RMA",
+      "colors": {
+        "primary": "#FFFFFF",
+        "secondary": "#000000",
+        "tertiary": "#FBBC09"
+      },
+      "logo": "realmadrid.png",
+      "formation": "4-3-3",
+      "rarity": "legendary",
+      "players": [
+        "p006", "p011", "p013"
+      ]
+    },
+    {
+      "id": "t004",
+      "name": "Arsenal",
+      "shortName": "ARS",
+      "colors": {
+        "primary": "#EF0107",
+        "secondary": "#FFFFFF",
+        "tertiary": "#9C824A"
+      },
+      "logo": "arsenal.png",
+      "formation": "4-2-3-1",
+      "rarity": "epic",
+      "players": [
+        "p014", "p015"
+      ]
+    },
+    {
+      "id": "t005",
+      "name": "Bayern Munich",
+      "shortName": "BAY",
+      "colors": {
+        "primary": "#DC052D",
+        "secondary": "#FFFFFF",
+        "tertiary": "#0066B2"
+      },
+      "logo": "bayern.png",
+      "formation": "4-2-3-1",
+      "rarity": "epic",
+      "players": [
+        "p016", "p020"
+      ]
+    },
+    {
+      "id": "t006",
+      "name": "Manchester United",
+      "shortName": "MUN",
+      "colors": {
+        "primary": "#DA291C",
+        "secondary": "#FBE122",
+        "tertiary": "#000000"
+      },
+      "logo": "manutd.png",
+      "formation": "4-2-3-1",
+      "rarity": "epic",
+      "players": [
+        "p019"
+      ]
+    },
+    {
+      "id": "t007",
+      "name": "Barcelona",
+      "shortName": "BAR",
+      "colors": {
+        "primary": "#A50044",
+        "secondary": "#004D98",
+        "tertiary": "#FFED02"
+      },
+      "logo": "barcelona.png",
+      "formation": "4-3-3",
+      "rarity": "legendary",
+      "players": []
+    },
+    {
+      "id": "t008",
+      "name": "Paris Saint-Germain",
+      "shortName": "PSG",
+      "colors": {
+        "primary": "#004170",
+        "secondary": "#DA291C",
+        "tertiary": "#FFFFFF"
+      },
+      "logo": "psg.png",
+      "formation": "4-3-3",
+      "rarity": "epic",
+      "players": []
+    },
+    {
+      "id": "t009",
+      "name": "Chelsea",
+      "shortName": "CHE",
+      "colors": {
+        "primary": "#034694",
+        "secondary": "#FFFFFF",
+        "tertiary": "#EE242C"
+      },
+      "logo": "chelsea.png",
+      "formation": "4-3-3",
+      "rarity": "epic",
+      "players": []
+    },
+    {
+      "id": "t010",
+      "name": "Juventus",
+      "shortName": "JUV",
+      "colors": {
+        "primary": "#000000",
+        "secondary": "#FFFFFF",
+        "tertiary": "#FCB914"
+      },
+      "logo": "juventus.png",
+      "formation": "4-4-2",
+      "rarity": "epic",
+      "players": []
+    },
+    {
+      "id": "t011",
+      "name": "Tottenham Hotspur",
+      "shortName": "TOT",
+      "colors": {
+        "primary": "#FFFFFF",
+        "secondary": "#132257",
+        "tertiary": "#CFAC67"
+      },
+      "logo": "tottenham.png",
+      "formation": "4-2-3-1",
+      "rarity": "rare",
+      "players": []
+    },
+    {
+      "id": "t012",
+      "name": "Borussia Dortmund",
+      "shortName": "DOR",
+      "colors": {
+        "primary": "#FDE100",
+        "secondary": "#000000",
+        "tertiary": "#FFFFFF"
+      },
+      "logo": "dortmund.png",
+      "formation": "4-2-3-1",
+      "rarity": "epic",
+      "players": []
+    },
+    {
+      "id": "t013",
+      "name": "AC Milan",
+      "shortName": "MIL",
+      "colors": {
+        "primary": "#FB090B",
+        "secondary": "#000000",
+        "tertiary": "#FFFFFF"
+      },
+      "logo": "acmilan.png",
+      "formation": "4-3-3",
+      "rarity": "epic",
+      "players": []
+    },
+    {
+      "id": "t014",
+      "name": "Inter Milan",
+      "shortName": "INT",
+      "colors": {
+        "primary": "#0033A0",
+        "secondary": "#000000",
+        "tertiary": "#FFFFFF"
+      },
+      "logo": "intermilan.png",
+      "formation": "3-5-2",
+      "rarity": "epic",
+      "players": []
+    },
+    {
+      "id": "t015",
+      "name": "Atletico Madrid",
+      "shortName": "ATM",
+      "colors": {
+        "primary": "#CB3524",
+        "secondary": "#FFFFFF",
+        "tertiary": "#192C6F"
+      },
+      "logo": "atletico.png",
+      "formation": "4-4-2",
+      "rarity": "epic",
+      "players": []
+    },
+    {
+      "id": "t016",
+      "name": "Inter Miami",
+      "shortName": "MIA",
+      "colors": {
+        "primary": "#F7B5CD",
+        "secondary": "#231F20",
+        "tertiary": "#FFFFFF"
+      },
+      "logo": "intermiami.png",
+      "formation": "4-3-3",
+      "rarity": "rare",
+      "players": [
+        "p005"
+      ]
+    }
+  ],
+  "formations": {
+    "4-3-3": {
+      "positions": [
+        {"position": "GK", "col": 1, "row": 5},
+        {"position": "LB", "col": 3, "row": 2},
+        {"position": "CB", "col": 3, "row": 4},
+        {"position": "CB", "col": 3, "row": 6},
+        {"position": "RB", "col": 3, "row": 8},
+        {"position": "CDM", "col": 5, "row": 5},
+        {"position": "CM", "col": 7, "row": 3},
+        {"position": "CM", "col": 7, "row": 7},
+        {"position": "LW", "col": 9, "row": 2},
+        {"position": "ST", "col": 9, "row": 5},
+        {"position": "RW", "col": 9, "row": 8}
+      ]
+    },
+    "4-2-3-1": {
+      "positions": [
+        {"position": "GK", "col": 1, "row": 5},
+        {"position": "LB", "col": 3, "row": 2},
+        {"position": "CB", "col": 3, "row": 4},
+        {"position": "CB", "col": 3, "row": 6},
+        {"position": "RB", "col": 3, "row": 8},
+        {"position": "CDM", "col": 5, "row": 4},
+        {"position": "CDM", "col": 5, "row": 6},
+        {"position": "CAM", "col": 8, "row": 5},
+        {"position": "LW", "col": 8, "row": 2},
+        {"position": "ST", "col": 9, "row": 5},
+        {"position": "RW", "col": 8, "row": 8}
+      ]
+    },
+    "4-4-2": {
+      "positions": [
+        {"position": "GK", "col": 1, "row": 5},
+        {"position": "LB", "col": 3, "row": 2},
+        {"position": "CB", "col": 3, "row": 4},
+        {"position": "CB", "col": 3, "row": 6},
+        {"position": "RB", "col": 3, "row": 8},
+        {"position": "LM", "col": 6, "row": 2},
+        {"position": "CM", "col": 6, "row": 4},
+        {"position": "CM", "col": 6, "row": 6},
+        {"position": "RM", "col": 6, "row": 8},
+        {"position": "ST", "col": 9, "row": 4},
+        {"position": "ST", "col": 9, "row": 6}
+      ]
+    },
+    "3-5-2": {
+      "positions": [
+        {"position": "GK", "col": 1, "row": 5},
+        {"position": "CB", "col": 3, "row": 3},
+        {"position": "CB", "col": 3, "row": 5},
+        {"position": "CB", "col": 3, "row": 7},
+        {"position": "LM", "col": 5, "row": 2},
+        {"position": "CM", "col": 6, "row": 4},
+        {"position": "CDM", "col": 6, "row": 5},
+        {"position": "CM", "col": 6, "row": 6},
+        {"position": "RM", "col": 5, "row": 8},
+        {"position": "ST", "col": 9, "row": 4},
+        {"position": "ST", "col": 9, "row": 6}
+      ]
+    }
+  },
+  "nationalities": [
+    {"code": "ARG", "name": "Argentina", "flag": "argentina.png"},
+    {"code": "BRA", "name": "Brazil", "flag": "brazil.png"},
+    {"code": "ENG", "name": "England", "flag": "england.png"},
+    {"code": "FRA", "name": "France", "flag": "france.png"},
+    {"code": "GER", "name": "Germany", "flag": "germany.png"},
+    {"code": "ITA", "name": "Italy", "flag": "italy.png"},
+    {"code": "NED", "name": "Netherlands", "flag": "netherlands.png"},
+    {"code": "POR", "name": "Portugal", "flag": "portugal.png"},
+    {"code": "ESP", "name": "Spain", "flag": "spain.png"},
+    {"code": "NOR", "name": "Norway", "flag": "norway.png"},
+    {"code": "BEL", "name": "Belgium", "flag": "belgium.png"},
+    {"code": "EGY", "name": "Egypt", "flag": "egypt.png"}
+  ]
+}

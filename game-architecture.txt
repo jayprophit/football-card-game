@@ -1,0 +1,2822 @@
+  // Buy
+  async buyItem(userId, listingId) {
+    try {
+      if (!this.web3Service || !this.web3Service.walletConnected) {
+        throw new Error('Web3 service not initialized or wallet not connected');
+      }
+      
+      // Buy item
+      const result = await this.web3Service.buyMarketplaceItem(listingId);
+      
+      return result;
+    } catch (error) {
+      console.error('Error buying marketplace item:', error);
+      throw error;
+    }
+  }
+  
+  // Cancel listing
+  async cancelListing(userId, listingId) {
+    try {
+      if (!this.web3Service || !this.web3Service.walletConnected) {
+        throw new Error('Web3 service not initialized or wallet not connected');
+      }
+      
+      // Cancel listing
+      const result = await this.web3Service.cancelMarketplaceListing(listingId);
+      
+      // Update user listings
+      if (this.userListings.has(userId)) {
+        const listings = this.userListings.get(userId);
+        const index = listings.findIndex(l => l.listingId === listingId);
+        
+        if (index >= 0) {
+          listings.splice(index, 1);
+        }
+      }
+      
+      return result;
+    } catch (error) {
+      console.error('Error cancelling listing:', error);
+      throw error;
+    }
+  }
+  
+  // Get user's listings
+  getUserListings(userId) {
+    return this.userListings.get(userId) || [];
+  }
+  
+  // Check if item is age-restricted
+  async checkItemAgeRestriction(listingId, userAgeVerification) {
+    // Get listing from contract or cache
+    const listing = this.activeListings.find(l => l.id === listingId);
+    
+    if (!listing) {
+      throw new Error('Listing not found');
+    }
+    
+    // Check if item is age-restricted
+    let minimumAge = 0;
+    
+    if (listing.isPlayerCard) {
+      // Player cards might have restrictions based on rarity
+      if (listing.item && listing.item.legendary) {
+        minimumAge = 18; // Legendary cards require 18+
+      } else {
+        minimumAge = 13; // Regular cards require 13+
+      }
+    } else if (listing.isTeam) {
+      // Teams might have restrictions
+      minimumAge = 16; // Teams require 16+
+    }
+    
+    return {
+      isRestricted: minimumAge > 0,
+      minimumAge,
+      userMeetsRequirement: userAgeVerification.age >= minimumAge
+    };
+  }
+}
+
+/**
+ * TournamentManager
+ * Handles tournament creation and management
+ */
+class TournamentManager {
+  constructor() {
+    this.tournaments = new Map();
+    this.userEntries = new Map();
+    this.web3Service = null;
+    this.blockchainTournaments = null;
+  }
+  
+  // Initialize tournament system
+  initialize(web3Service) {
+    this.web3Service = web3Service;
+    
+    if (web3Service && web3Service.contracts.tournament) {
+      this.blockchainTournaments = new TournamentSystem(web3Service);
+      this.blockchainTournaments.initialize();
+    }
+  }
+  
+  // Create tournament
+  async createTournament(options) {
+    // Generate tournament ID
+    const tournamentId = `tournament-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+    
+    // Create tournament object
+    const tournament = {
+      id: tournamentId,
+      name: options.name,
+      description: options.description,
+      createdBy: options.createdBy,
+      startDate: options.startDate,
+      endDate: options.endDate,
+      maxParticipants: options.maxParticipants || 32,
+      participants: [],
+      matches: [],
+      prizes: options.prizes || [],
+      entryFee: options.entryFee || 0,
+      status: 'created',
+      requiresAge: options.requiresAge || 16,
+      requiresKyc: options.requiresKyc || false,
+      onBlockchain: options.onBlockchain || false,
+      blockchainTournamentId: null,
+      createdAt: new Date()
+    };
+    
+    // Store tournament
+    this.tournaments.set(tournamentId, tournament);
+    
+    // Create blockchain tournament if required
+    if (options.onBlockchain && this.blockchainTournaments) {
+      try {
+        const blockchainResult = await this.blockchainTournaments.createTournament({
+          name: options.name,
+          description: options.description,
+          entryFee: options.entryFee || 0,
+          maxParticipants: options.maxParticipants || 32,
+          startTime: new Date(options.startDate),
+          endTime: new Date(options.endDate),
+          tournamentType: options.type || 'knockout',
+          nftRequired: options.requiresNft || false
+        });
+        
+        tournament.blockchainTournamentId = blockchainResult.tournamentId;
+        tournament.blockchainTransactionHash = blockchainResult.transactionHash;
+      } catch (error) {
+        console.error('Error creating blockchain tournament:', error);
+        tournament.blockchainError = error.message;
+      }
+    }
+    
+    return tournament;
+  }
+  
+  // Get tournament
+  getTournament(tournamentId) {
+    return this.tournaments.get(tournamentId) || null;
+  }
+  
+  // Get all tournaments
+  getAllTournaments() {
+    return Array.from(this.tournaments.values());
+  }
+  
+  // Get active tournaments
+  getActiveTournaments() {
+    const now = new Date();
+    return Array.from(this.tournaments.values()).filter(t => 
+      new Date(t.startDate) <= now && new Date(t.endDate) >= now && t.status !== 'completed'
+    );
+  }
+  
+  // Enter tournament
+  async enterTournament(userId, tournamentId) {
+    const tournament = this.tournaments.get(tournamentId);
+    
+    if (!tournament) {
+      throw new Error('Tournament not found');
+    }
+    
+    // Check if tournament is full
+    if (tournament.participants.length >= tournament.maxParticipants) {
+      throw new Error('Tournament is full');
+    }
+    
+    // Check if user already entered
+    if (tournament.participants.includes(userId)) {
+      throw new Error('User already entered tournament');
+    }
+    
+    // Add user to participants
+    tournament.participants.push(userId);
+    
+    // Record entry
+    if (!this.userEntries.has(userId)) {
+      this.userEntries.set(userId, []);
+    }
+    
+    const entry = {
+      userId,
+      tournamentId,
+      enteredAt: new Date(),
+      status: 'active'
+    };
+    
+    this.userEntries.get(userId).push(entry);
+    
+    // Enter blockchain tournament if applicable
+    if (tournament.onBlockchain && tournament.blockchainTournamentId && this.blockchainTournaments) {
+      try {
+        // For blockchain tournaments, user needs to have a team
+        // This would be implemented with proper team selection
+        const teamId = 1; // Placeholder
+        
+        const blockchainResult = await this.blockchainTournaments.registerForTournament(
+          tournament.blockchainTournamentId,
+          teamId
+        );
+        
+        entry.blockchainRegistered = true;
+        entry.blockchainTransactionHash = blockchainResult.transactionHash;
+      } catch (error) {
+        console.error('Error entering blockchain tournament:', error);
+        entry.blockchainError = error.message;
+      }
+    }
+    
+    return entry;
+  }
+  
+  // Get user tournament entries
+  getUserTournamentEntries(userId) {
+    return this.userEntries.get(userId) || [];
+  }
+  
+  // Check if user meets tournament requirements
+  checkTournamentRequirements(userId, tournamentId, userProfile) {
+    const tournament = this.tournaments.get(tournamentId);
+    
+    if (!tournament) {
+      throw new Error('Tournament not found');
+    }
+    
+    // Check age requirement
+    const meetsAgeRequirement = userProfile.age >= tournament.requiresAge;
+    
+    // Check KYC requirement
+    const meetsKycRequirement = !tournament.requiresKyc || 
+      (userProfile.kycStatus && userProfile.kycStatus.status === 'approved');
+    
+    return {
+      meetsRequirements: meetsAgeRequirement && meetsKycRequirement,
+      meetsAgeRequirement,
+      meetsKycRequirement,
+      minimumAge: tournament.requiresAge,
+      requiresKyc: tournament.requiresKyc
+    };
+  }
+}
+
+/**
+ * Player Progression System
+ * Handles player experience, levels, and unlocks
+ */
+class PlayerProgressionSystem {
+  constructor() {
+    this.playerProgress = new Map();
+    this.playerCards = new Map();
+    this.levelRequirements = [
+      100,   // Level 1 -> 2
+      300,   // Level 2 -> 3
+      600,   // Level 3 -> 4
+      1000,  // Level 4 -> 5
+      1500,  // Level 5 -> 6
+      2100,  // Level 6 -> 7
+      2800,  // Level 7 -> 8
+      3600,  // Level 8 -> 9
+      4500,  // Level 9 -> 10
+      5500,  // Level 10 -> 11
+      6600,  // Level 11 -> 12
+      7800,  // Level 12 -> 13
+      9100,  // Level 13 -> 14
+      10500, // Level 14 -> 15
+      12000  // Level 15 -> 16
+    ];
+    this.levelRewards = [
+      { coins: 100, packType: 'bronze' },     // Level 2
+      { coins: 200, packType: 'bronze' },     // Level 3
+      { coins: 300, packType: 'silver' },     // Level 4
+      { coins: 400, packType: 'silver' },     // Level 5
+      { coins: 500, packType: 'gold' },       // Level 6
+      { coins: 600, packType: 'gold' },       // Level 7
+      { coins: 700, packType: 'premium' },    // Level 8
+      { coins: 800, packType: 'premium' },    // Level 9
+      { coins: 900, packType: 'elite' },      // Level 10
+      { coins: 1000, packType: 'elite' },     // Level 11
+      { coins: 1100, packType: 'legendary' }, // Level 12
+      { coins: 1200, packType: 'legendary' }, // Level 13
+      { coins: 1300, packType: 'ultimate' },  // Level 14
+      { coins: 1400, packType: 'ultimate' },  // Level 15
+      { coins: 1500, packType: 'ultimate' }   // Level 16
+    ];
+  }
+  
+  // Initialize player progression
+  initialize(userId) {
+    // Create progression object if it doesn't exist
+    if (!this.playerProgress.has(userId)) {
+      this.playerProgress.set(userId, {
+        userId,
+        level: 1,
+        experience: 0,
+        coins: 0,
+        matches: {
+          played: 0,
+          won: 0,
+          drawn: 0,
+          lost: 0
+        },
+        stats: {
+          goalsScored: 0,
+          goalsConceded: 0,
+          cleanSheets: 0,
+          cards: {
+            yellow: 0,
+            red: 0
+          }
+        },
+        rewards: [],
+        createdAt: new Date(),
+        updatedAt: new Date()
+      });
+    }
+    
+    // Initialize cards collection if it doesn't exist
+    if (!this.playerCards.has(userId)) {
+      this.playerCards.set(userId, []);
+    }
+    
+    return this.playerProgress.get(userId);
+  }
+  
+  // Get player progress
+  getPlayerProgress(userId) {
+    return this.playerProgress.get(userId) || null;
+  }
+  
+  // Add experience
+  async addExperience(userId, amount, reason) {
+    const progress = this.playerProgress.get(userId);
+    
+    if (!progress) {
+      throw new Error('Player progress not found');
+    }
+    
+    // Calculate current level
+    const currentLevel = progress.level;
+    
+    // Add experience
+    progress.experience += amount;
+    
+    // Check if player leveled up
+    const newLevel = this._calculateLevel(progress.experience);
+    const leveledUp = newLevel > currentLevel;
+    
+    // Update level if changed
+    if (leveledUp) {
+      progress.level = newLevel;
+      
+      // Process level-up rewards
+      const levelUps = [];
+      
+      for (let lvl = currentLevel + 1; lvl <= newLevel; lvl++) {
+        const reward = this.levelRewards[lvl - 2]; // -2 because rewards start at level 2
+        
+        if (reward) {
+          progress.coins += reward.coins;
+          
+          // Record level up reward
+          levelUps.push({
+            level: lvl,
+            reward,
+            timestamp: new Date()
+          });
+          
+          // Add to rewards history
+          progress.rewards.push({
+            type: 'level_up',
+            level: lvl,
+            coins: reward.coins,
+            packType: reward.packType,
+            timestamp: new Date()
+          });
+        }
+      }
+    }
+    
+    // Update last update time
+    progress.updatedAt = new Date();
+    
+    // Update in store
+    this.playerProgress.set(userId, progress);
+    
+    return {
+      newExperience: progress.experience,
+      previousLevel: currentLevel,
+      newLevel: progress.level,
+      leveledUp,
+      levelUps: leveledUp ? progress.rewards.filter(r => r.type === 'level_up' && r.level > currentLevel) : []
+    };
+  }
+  
+  // Calculate level based on experience
+  _calculateLevel(experience) {
+    let level = 1;
+    
+    for (let i = 0; i < this.levelRequirements.length; i++) {
+      if (experience >= this.levelRequirements[i]) {
+        level++;
+      } else {
+        break;
+      }
+    }
+    
+    return level;
+  }
+  
+  // Add cards to player's collection
+  async addCards(userId, cards) {
+    if (!this.playerCards.has(userId)) {
+      this.playerCards.set(userId, []);
+    }
+    
+    const userCards = this.playerCards.get(userId);
+    
+    // Add unique ID to each card and timestamp
+    const cardsWithIds = cards.map(card => ({
+      ...card,
+      id: `card-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
+      acquiredAt: new Date()
+    }));
+    
+    // Add to collection
+    userCards.push(...cardsWithIds);
+    
+    // Update in store
+    this.playerCards.set(userId, userCards);
+    
+    return cardsWithIds;
+  }
+  
+  // Get player cards
+  getPlayerCards(userId) {
+    return this.playerCards.get(userId) || [];
+  }
+  
+  // Add coins
+  async addCoins(userId, amount, reason) {
+    const progress = this.playerProgress.get(userId);
+    
+    if (!progress) {
+      throw new Error('Player progress not found');
+    }
+    
+    // Add coins
+    progress.coins += amount;
+    
+    // Record reward
+    progress.rewards.push({
+      type: 'coins',
+      amount,
+      reason,
+      timestamp: new Date()
+    });
+    
+    // Update last update time
+    progress.updatedAt = new Date();
+    
+    // Update in store
+    this.playerProgress.set(userId, progress);
+    
+    return {
+      previousCoins: progress.coins - amount,
+      newCoins: progress.coins,
+      added: amount
+    };
+  }
+  
+  // Update match statistics
+  async updateMatchStats(userId, matchResult) {
+    const progress = this.playerProgress.get(userId);
+    
+    if (!progress) {
+      throw new Error('Player progress not found');
+    }
+    
+    // Update match count
+    progress.matches.played++;
+    
+    // Update result
+    if (matchResult.won) {
+      progress.matches.won++;
+    } else if (matchResult.drawn) {
+      progress.matches.drawn++;
+    } else {
+      progress.matches.lost++;
+    }
+    
+    // Update goals
+    progress.stats.goalsScored += matchResult.goalsScored || 0;
+    progress.stats.goalsConceded += matchResult.goalsConceded || 0;
+    
+    // Update clean sheets
+    if (matchResult.goalsConceded === 0) {
+      progress.stats.cleanSheets++;
+    }
+    
+    // Update cards
+    if (matchResult.cards) {
+      progress.stats.cards.yellow += matchResult.cards.yellow || 0;
+      progress.stats.cards.red += matchResult.cards.red || 0;
+    }
+    
+    // Update last update time
+    progress.updatedAt = new Date();
+    
+    // Update in store
+    this.playerProgress.set(userId, progress);
+    
+    return progress;
+  }
+}
+
+// Export the FootballChess game class
+export default FootballChessGame;
+  async processPendingRewards(userId) {
+    try {
+      if (!this.web3Service || !this.web3Service.walletConnected) {
+        throw new Error('Web3 service not initialized or wallet not connected');
+      }
+      
+      // Get pending rewards for user
+      const pendingRewards = this.pendingRewards.get(userId) || [];
+      
+      if (pendingRewards.length === 0) {
+        return { success: true, processed: 0, message: 'No pending rewards' };
+      }
+      
+      const results = [];
+      let totalAmount = 0;
+      
+      // Calculate total amount
+      for (const reward of pendingRewards) {
+        totalAmount += reward.amount;
+      }
+      
+      // Award total amount
+      try {
+        const result = await this.awardRewards(userId, totalAmount, 'Pending rewards processing');
+        
+        // Mark all as processed
+        for (const reward of pendingRewards) {
+          reward.status = 'processed';
+          reward.processedAt = new Date();
+          
+          results.push({
+            pendingId: reward.id,
+            amount: reward.amount,
+            reason: reward.reason,
+            success: true
+          });
+        }
+        
+        // Clear processed rewards
+        this.pendingRewards.set(userId, []);
+        
+        return {
+          success: true,
+          totalAmount,
+          transactionHash: result.transactionHash,
+          processed: pendingRewards.length,
+          rewards: results
+        };
+      } catch (error) {
+        console.error('Error processing pending rewards:', error);
+        
+        // Mark all as failed
+        for (const reward of pendingRewards) {
+          reward.status = 'failed';
+          reward.error = error.message;
+          
+          results.push({
+            pendingId: reward.id,
+            amount: reward.amount,
+            reason: reward.reason,
+            success: false,
+            error: error.message
+          });
+        }
+        
+        return {
+          success: false,
+          error: error.message,
+          failed: pendingRewards.length,
+          rewards: results
+        };
+      }
+    } catch (error) {
+      console.error('Error in processPendingRewards:', error);
+      throw error;
+    }
+  }
+  
+  // Calculate reward for action
+  calculateReward(action, data = {}) {
+    switch (action) {
+      case 'win_game':
+        return this.rewardRates.winGame;
+      case 'score_goal':
+        return this.rewardRates.scoredGoal;
+      case 'clean_sheet':
+        return this.rewardRates.cleanSheet;
+      case 'tournament_win':
+        return this.rewardRates.tournamentWin;
+      case 'daily_challenge':
+        return this.rewardRates.dailyChallenge;
+      case 'season_progress':
+        return this.rewardRates.seasonProgress;
+      default:
+        return 1; // Default 1 token
+    }
+  }
+  
+  // Get user's token balance
+  async getTokenBalance(userId) {
+    try {
+      if (!this.web3Service || !this.web3Service.walletConnected) {
+        // Return pending rewards if wallet not connected
+        const pendingRewards = this.pendingRewards.get(userId) || [];
+        let pendingTotal = 0;
+        
+        for (const reward of pendingRewards) {
+          if (reward.status === 'pending') {
+            pendingTotal += reward.amount;
+          }
+        }
+        
+        return {
+          connected: false,
+          balance: 0,
+          pending: pendingTotal,
+          pendingCount: pendingRewards.length
+        };
+      }
+      
+      // Get balance from contract
+      const balance = await this.web3Service.getRewardTokenBalance();
+      
+      // Get pending rewards
+      const pendingRewards = this.pendingRewards.get(userId) || [];
+      let pendingTotal = 0;
+      
+      for (const reward of pendingRewards) {
+        if (reward.status === 'pending') {
+          pendingTotal += reward.amount;
+        }
+      }
+      
+      return {
+        connected: true,
+        balance: balance.balanceFormatted,
+        balanceRaw: balance.balance,
+        lockedBalance: balance.lockedBalanceFormatted,
+        lockedBalanceRaw: balance.lockedBalance,
+        totalBalance: balance.totalBalanceFormatted,
+        totalBalanceRaw: balance.totalBalance,
+        pending: pendingTotal,
+        pendingCount: pendingRewards.length
+      };
+    } catch (error) {
+      console.error('Error getting token balance:', error);
+      throw error;
+    }
+  }
+}
+
+/**
+ * MarketplaceSystem
+ * Handles buying and selling of NFTs
+ */
+class MarketplaceSystem {
+  constructor() {
+    this.web3Service = null;
+    this.activeListings = [];
+    this.userListings = new Map();
+  }
+  
+  // Initialize marketplace
+  initialize(web3Service) {
+    this.web3Service = web3Service;
+  }
+  
+  // Get active listings
+  async getActiveListings(start = 0, count = 10) {
+    try {
+      if (!this.web3Service) {
+        throw new Error('Web3 service not initialized');
+      }
+      
+      // Get listings from contract
+      const listings = await this.web3Service.getMarketplaceListings(start, count);
+      
+      // Cache results
+      this.activeListings = listings;
+      
+      return listings;
+    } catch (error) {
+      console.error('Error getting marketplace listings:', error);
+      throw error;
+    }
+  }
+  
+  // List player card for sale
+  async listPlayerCard(userId, cardId, price) {
+    try {
+      if (!this.web3Service || !this.web3Service.walletConnected) {
+        throw new Error('Web3 service not initialized or wallet not connected');
+      }
+      
+      // List card
+      const result = await this.web3Service.listPlayerCardOnMarketplace(cardId, price);
+      
+      // Store in user listings
+      if (!this.userListings.has(userId)) {
+        this.userListings.set(userId, []);
+      }
+      
+      this.userListings.get(userId).push({
+        listingId: result.listingId,
+        cardId,
+        price,
+        timestamp: new Date()
+      });
+      
+      return result;
+    } catch (error) {
+      console.error('Error listing player card:', error);
+      throw error;
+    }
+  }
+  
+  // List team for sale
+  async listTeam(userId, teamId, price) {
+    try {
+      if (!this.web3Service || !this.web3Service.walletConnected) {
+        throw new Error('Web3 service not initialized or wallet not connected');
+      }
+      
+      // List team
+      const result = await this.web3Service.listTeamOnMarketplace(teamId, price);
+      
+      // Store in user listings
+      if (!this.userListings.has(userId)) {
+        this.userListings.set(userId, []);
+      }
+      
+      this.userListings.get(userId).push({
+        listingId: result.listingId,
+        teamId,
+        price,
+        timestamp: new Date()
+      });
+      
+      return result;
+    } catch (error) {
+      console.error('Error listing team:', error);
+      throw error;
+    }
+  }
+  
+  // Buy  async createCustomPlayer(photoData, playerDetails) {
+    // Check feature access
+    const access = await this.userSystem.checkFeatureAccess(
+      this.currentUser.user.id,
+      'nftCreation'
+    );
+    
+    if (!access.hasAccess) {
+      throw new Error(`Feature not available to this user. ${access.minimumAge ? 'Minimum age: ' + access.minimumAge : ''} ${access.requiresKyc ? 'KYC required' : ''}`);
+    }
+    
+    // Process the photo and create card
+    const customCard = await this.contentSystem.createCustomPlayer(
+      this.currentUser.user.id,
+      photoData,
+      playerDetails
+    );
+    
+    // If user is underage, mark card for future minting
+    if (this.currentUser.profile.age < 18) {
+      // Store the card data but don't mint as NFT yet
+      const cardData = await this.blockchainIntegration.nftSystem.preparePlayerCard(
+        this.currentUser.user.id,
+        customCard
+      );
+      
+      console.log('Custom card prepared for future minting when user turns 18');
+      return {
+        ...customCard,
+        pendingNft: true,
+        mintingAt: this.currentUser.ageStatus.unlockDate
+      };
+    } else if (access.meetsKycRequirement && this.blockchainIntegration.web3Service.walletConnected) {
+      // Mint as NFT
+      const nftResult = await this.blockchainIntegration.nftSystem.mintPlayerCard(
+        customCard
+      );
+      
+      return {
+        ...customCard,
+        nft: nftResult
+      };
+    } else {
+      // Store the card data but prompt for KYC or wallet connection
+      return {
+        ...customCard,
+        pendingNft: true,
+        requiresKyc: !access.meetsKycRequirement,
+        requiresWallet: !this.blockchainIntegration.web3Service.walletConnected
+      };
+    }
+  }
+  
+  // Handle earning rewards
+  async earnRewards(amount, reason) {
+    try {
+      // Check if user has rewards access
+      const access = await this.userSystem.checkFeatureAccess(
+        this.currentUser.user.id,
+        'rewards'
+      );
+      
+      // Even users without full access can earn rewards, they're just locked
+      const isUnderage = this.currentUser.profile.age < 18;
+      
+      if (isUnderage) {
+        // Lock rewards for underage users with auto-staking
+        await this.userSystem.rewardsLockService.lockRewards(
+          this.currentUser.user.id,
+          amount,
+          reason
+        );
+        
+        // Get updated status
+        const rewardsStatus = await this.userSystem.rewardsLockService.getStatus(
+          this.currentUser.user.id
+        );
+        
+        console.log(`Rewards locked for underage user. Currently locked: ${rewardsStatus.locked}, Projected value at 18: ${rewardsStatus.projectedValue}`);
+        
+        return {
+          success: true,
+          locked: true,
+          amount,
+          currentLocked: rewardsStatus.locked,
+          projectedValue: rewardsStatus.projectedValue,
+          unlockDate: rewardsStatus.unlockDate
+        };
+      } else if (access.meetsKycRequirement && this.blockchainIntegration.web3Service.walletConnected) {
+        // Direct rewards for verified adult users
+        const rewardResult = await this.blockchainIntegration.rewardsSystem.awardRewards(
+          this.currentUser.user.id,
+          amount,
+          reason
+        );
+        
+        return rewardResult;
+      } else {
+        // Store pending rewards that require KYC or wallet connection
+        const pendingResult = await this.blockchainIntegration.rewardsSystem.storePendingRewards(
+          this.currentUser.user.id,
+          amount,
+          reason
+        );
+        
+        return {
+          success: true,
+          pending: true,
+          amount,
+          requiresKyc: !access.meetsKycRequirement,
+          requiresWallet: !this.blockchainIntegration.web3Service.walletConnected,
+          ...pendingResult
+        };
+      }
+    } catch (error) {
+      console.error('Error processing rewards:', error);
+      throw error;
+    }
+  }
+  
+  // Complete KYC process
+  async completeKYC(kycData, documents) {
+    try {
+      // Check user age
+      if (this.currentUser.profile.age < 18) {
+        throw new Error('KYC is only available for users 18 and older');
+      }
+      
+      // Submit KYC
+      const kycResult = await this.userSystem.updateKYC(
+        this.currentUser.user.id,
+        kycData,
+        documents
+      );
+      
+      // If approval is instant (in this demo), unlock blockchain features
+      if (kycResult.status === 'approved') {
+        // Connect blockchain features
+        if (!this.blockchainIntegration.web3Service.initialized) {
+          await this.blockchainIntegration.initialize({
+            userId: this.currentUser.user.id
+          });
+        }
+        
+        // Process any pending NFTs
+        await this.processPendingNFTs();
+        
+        // Process any pending rewards
+        await this.processPendingRewards();
+      }
+      
+      return kycResult;
+    } catch (error) {
+      console.error('Error completing KYC:', error);
+      throw error;
+    }
+  }
+  
+  // Process any pending NFTs after KYC
+  async processPendingNFTs() {
+    try {
+      if (!this.blockchainIntegration.web3Service.walletConnected) {
+        throw new Error('Wallet not connected');
+      }
+      
+      const result = await this.blockchainIntegration.nftSystem.processPendingNFTs(
+        this.currentUser.user.id
+      );
+      
+      return result;
+    } catch (error) {
+      console.error('Error processing pending NFTs:', error);
+      throw error;
+    }
+  }
+  
+  // Process any pending rewards after KYC
+  async processPendingRewards() {
+    try {
+      if (!this.blockchainIntegration.web3Service.walletConnected) {
+        throw new Error('Wallet not connected');
+      }
+      
+      const result = await this.blockchainIntegration.rewardsSystem.processPendingRewards(
+        this.currentUser.user.id
+      );
+      
+      return result;
+    } catch (error) {
+      console.error('Error processing pending rewards:', error);
+      throw error;
+    }
+  }
+  
+  // Purchase in-game items
+  async purchaseItem(itemId, paymentMethod) {
+    try {
+      // Get item details
+      const item = await this.contentSystem.getItemDetails(itemId);
+      
+      // Check age restrictions for item
+      const access = await this.userSystem.checkFeatureAccess(
+        this.currentUser.user.id,
+        item.category === 'nft' ? 'nftTrading' : 'purchases'
+      );
+      
+      if (!access.hasAccess) {
+        throw new Error(`Purchase not available to this user. ${access.minimumAge ? 'Minimum age: ' + access.minimumAge : ''} ${access.requiresKyc ? 'KYC required' : ''}`);
+      }
+      
+      // Process payment
+      const paymentResult = await this.paymentSystem.processPayment(
+        paymentMethod,
+        item.price,
+        item.currency,
+        `Purchase of ${item.name}`,
+        {
+          userId: this.currentUser.user.id,
+          purchaseType: item.category,
+          itemId
+        }
+      );
+      
+      if (!paymentResult.success) {
+        throw new Error(`Payment failed: ${paymentResult.error}`);
+      }
+      
+      // Deliver item based on type
+      let deliveryResult;
+      
+      switch (item.category) {
+        case 'card_pack':
+          deliveryResult = await this._deliverCardPack(item);
+          break;
+        case 'customization':
+          deliveryResult = await this._deliverCustomization(item);
+          break;
+        case 'nft':
+          deliveryResult = await this._deliverNFT(item);
+          break;
+        case 'tournament_entry':
+          deliveryResult = await this._processTournamentEntry(item);
+          break;
+        default:
+          deliveryResult = { status: 'unknown_item_type' };
+      }
+      
+      return {
+        success: true,
+        payment: paymentResult,
+        item,
+        delivery: deliveryResult
+      };
+    } catch (error) {
+      console.error('Error processing purchase:', error);
+      throw error;
+    }
+  }
+  
+  // Deliver card pack
+  async _deliverCardPack(item) {
+    // Generate cards based on pack type
+    const cards = await this.contentSystem.generateCardPack(
+      item.packType,
+      this.currentUser.user.id
+    );
+    
+    // Add cards to user's collection
+    await this.progressionSystem.playerProgression.addCards(
+      this.currentUser.user.id,
+      cards
+    );
+    
+    // If user is 18+ and verified, create NFTs
+    const isAdult = this.currentUser.profile.age >= 18;
+    const isVerified = this.currentUser.kycStatus && this.currentUser.kycStatus.status === 'approved';
+    
+    if (isAdult && isVerified && this.blockchainIntegration.web3Service.walletConnected) {
+      // Create NFTs for the cards
+      const nftResults = await Promise.all(
+        cards.map(card => this.blockchainIntegration.nftSystem.mintPlayerCard(card))
+      );
+      
+      return {
+        status: 'delivered',
+        cards,
+        nfts: nftResults
+      };
+    } else {
+      // Store as pending NFTs for underage users
+      if (!isAdult) {
+        await Promise.all(
+          cards.map(card => this.blockchainIntegration.nftSystem.preparePlayerCard(
+            this.currentUser.user.id,
+            card
+          ))
+        );
+      }
+      
+      return {
+        status: 'delivered',
+        cards,
+        pendingNfts: !isAdult,
+        requiresKyc: isAdult && !isVerified,
+        requiresWallet: isAdult && isVerified && !this.blockchainIntegration.web3Service.walletConnected
+      };
+    }
+  }
+  
+  // Deliver customization item
+  async _deliverCustomization(item) {
+    // Add customization to user's account
+    await this.contentSystem.customizationManager.addCustomization(
+      this.currentUser.user.id,
+      item
+    );
+    
+    return {
+      status: 'delivered',
+      item
+    };
+  }
+  
+  // Deliver NFT
+  async _deliverNFT(item) {
+    // Check if user can receive NFTs
+    const isAdult = this.currentUser.profile.age >= 18;
+    const isVerified = this.currentUser.kycStatus && this.currentUser.kycStatus.status === 'approved';
+    
+    if (!isAdult) {
+      // Store as pending NFT for underage users
+      await this.blockchainIntegration.nftSystem.preparePendingNFT(
+        this.currentUser.user.id,
+        item,
+        this.currentUser.ageStatus.unlockDate
+      );
+      
+      return {
+        status: 'pending_age',
+        item,
+        unlockDate: this.currentUser.ageStatus.unlockDate
+      };
+    } else if (!isVerified) {
+      // Store as pending verification
+      await this.blockchainIntegration.nftSystem.preparePendingNFT(
+        this.currentUser.user.id,
+        item
+      );
+      
+      return {
+        status: 'pending_kyc',
+        item,
+        requiresKyc: true
+      };
+    } else if (!this.blockchainIntegration.web3Service.walletConnected) {
+      // Store as pending wallet connection
+      await this.blockchainIntegration.nftSystem.preparePendingNFT(
+        this.currentUser.user.id,
+        item
+      );
+      
+      return {
+        status: 'pending_wallet',
+        item,
+        requiresWallet: true
+      };
+    } else {
+      // Deliver NFT directly
+      const nftResult = await this.blockchainIntegration.nftSystem.transferNFT(
+        item.contractAddress,
+        item.tokenId,
+        this.blockchainIntegration.web3Service.userAddress
+      );
+      
+      return {
+        status: 'delivered',
+        item,
+        nft: nftResult
+      };
+    }
+  }
+  
+  // Process tournament entry
+  async _processTournamentEntry(item) {
+    // Enter tournament
+    const tournamentEntry = await this.progressionSystem.tournamentManager.enterTournament(
+      this.currentUser.user.id,
+      item.tournamentId
+    );
+    
+    return {
+      status: 'registered',
+      tournamentId: item.tournamentId,
+      entry: tournamentEntry
+    };
+  }
+}
+
+/**
+ * NFT System
+ * Handles player cards and teams as NFTs
+ */
+class NFTSystem {
+  constructor() {
+    this.web3Service = null;
+    this.pendingNFTs = new Map(); // Storage for pending NFTs
+  }
+  
+  // Initialize NFT system
+  initialize(web3Service) {
+    this.web3Service = web3Service;
+  }
+  
+  // Mint player card as NFT
+  async mintPlayerCard(cardData) {
+    try {
+      if (!this.web3Service || !this.web3Service.walletConnected) {
+        throw new Error('Web3 service not initialized or wallet not connected');
+      }
+      
+      // Prepare player data for blockchain
+      const playerData = {
+        position: cardData.position,
+        rating: cardData.rating || 50,
+        number: cardData.number || 1,
+        movementType: this._getMovementTypeForPosition(cardData.position),
+        speed: cardData.speed || 50,
+        passing: cardData.passing || 50,
+        shooting: cardData.shooting || 50,
+        defending: cardData.defending || 50,
+        durability: cardData.durability || 50,
+        legendary: cardData.isLegendary || false
+      };
+      
+      // Call contract to create player card
+      const result = await this.web3Service.createPlayerCard(playerData);
+      
+      return {
+        success: true,
+        tokenId: result.tokenId,
+        transactionHash: result.transactionHash
+      };
+    } catch (error) {
+      console.error('Error minting player card:', error);
+      throw error;
+    }
+  }
+  
+  // Prepare player card for future minting (for underage users)
+  async preparePlayerCard(userId, cardData) {
+    try {
+      // Generate unique ID for pending NFT
+      const pendingId = `pending-${userId}-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+      
+      // Store pending NFT data
+      const pendingNFT = {
+        id: pendingId,
+        userId,
+        type: 'player_card',
+        data: cardData,
+        createdAt: new Date(),
+        status: 'pending'
+      };
+      
+      // Add to pending NFTs
+      if (!this.pendingNFTs.has(userId)) {
+        this.pendingNFTs.set(userId, []);
+      }
+      
+      this.pendingNFTs.get(userId).push(pendingNFT);
+      
+      return {
+        success: true,
+        pendingId,
+        status: 'pending'
+      };
+    } catch (error) {
+      console.error('Error preparing player card:', error);
+      throw error;
+    }
+  }
+  
+  // Process pending NFTs for a user (e.g., after turning 18 or completing KYC)
+  async processPendingNFTs(userId) {
+    try {
+      if (!this.web3Service || !this.web3Service.walletConnected) {
+        throw new Error('Web3 service not initialized or wallet not connected');
+      }
+      
+      // Get pending NFTs for user
+      const pendingNFTs = this.pendingNFTs.get(userId) || [];
+      
+      if (pendingNFTs.length === 0) {
+        return { success: true, processed: 0, message: 'No pending NFTs' };
+      }
+      
+      const results = [];
+      
+      // Process each pending NFT
+      for (const pendingNFT of pendingNFTs) {
+        try {
+          let result;
+          
+          // Process based on NFT type
+          if (pendingNFT.type === 'player_card') {
+            result = await this.mintPlayerCard(pendingNFT.data);
+          } else if (pendingNFT.type === 'team') {
+            result = await this.mintTeam(pendingNFT.data);
+          } else {
+            throw new Error(`Unknown NFT type: ${pendingNFT.type}`);
+          }
+          
+          // Mark as processed
+          pendingNFT.status = 'processed';
+          pendingNFT.processedAt = new Date();
+          pendingNFT.result = result;
+          
+          results.push({
+            pendingId: pendingNFT.id,
+            success: true,
+            result
+          });
+        } catch (error) {
+          console.error(`Error processing pending NFT ${pendingNFT.id}:`, error);
+          
+          // Mark as failed
+          pendingNFT.status = 'failed';
+          pendingNFT.error = error.message;
+          
+          results.push({
+            pendingId: pendingNFT.id,
+            success: false,
+            error: error.message
+          });
+        }
+      }
+      
+      // Update pending NFTs, removing processed ones
+      this.pendingNFTs.set(
+        userId,
+        pendingNFTs.filter(nft => nft.status !== 'processed')
+      );
+      
+      return {
+        success: true,
+        total: pendingNFTs.length,
+        processed: results.filter(r => r.success).length,
+        failed: results.filter(r => !r.success).length,
+        results
+      };
+    } catch (error) {
+      console.error('Error processing pending NFTs:', error);
+      throw error;
+    }
+  }
+  
+  // Store a pending NFT for future delivery
+  async preparePendingNFT(userId, nftData, unlockDate = null) {
+    try {
+      // Generate unique ID for pending NFT
+      const pendingId = `pending-${userId}-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+      
+      // Store pending NFT data
+      const pendingNFT = {
+        id: pendingId,
+        userId,
+        type: 'external_nft',
+        data: nftData,
+        unlockDate,
+        createdAt: new Date(),
+        status: unlockDate ? 'pending_age' : 'pending'
+      };
+      
+      // Add to pending NFTs
+      if (!this.pendingNFTs.has(userId)) {
+        this.pendingNFTs.set(userId, []);
+      }
+      
+      this.pendingNFTs.get(userId).push(pendingNFT);
+      
+      return {
+        success: true,
+        pendingId,
+        status: pendingNFT.status
+      };
+    } catch (error) {
+      console.error('Error preparing pending NFT:', error);
+      throw error;
+    }
+  }
+  
+  // Get movement type based on position
+  _getMovementTypeForPosition(position) {
+    // Map football positions to chess-like movement patterns
+    const positionMovements = {
+      'Goalkeeper': 'Rook',
+      'Defender': 'Bishop',
+      'Midfielder': 'Queen',
+      'Forward': 'Knight',
+      'Striker': 'Knight',
+      'Winger': 'Knight'
+    };
+    
+    return positionMovements[position] || 'Pawn';
+  }
+}
+
+/**
+ * Rewards System
+ * Handles in-game rewards and tokens
+ */
+class RewardsSystem {
+  constructor() {
+    this.web3Service = null;
+    this.userAccount = null;
+    this.pendingRewards = new Map(); // Storage for pending rewards
+    
+    // Define reward rates
+    this.rewardRates = {
+      winGame: 10,
+      scoredGoal: 2,
+      cleanSheet: 5,
+      tournamentWin: 50,
+      dailyChallenge: 3,
+      seasonProgress: 20
+    };
+  }
+  
+  // Initialize rewards system
+  initialize(web3Service, userAccount) {
+    this.web3Service = web3Service;
+    this.userAccount = userAccount;
+  }
+  
+  // Award rewards
+  async awardRewards(userId, amount, reason) {
+    try {
+      if (!this.web3Service || !this.web3Service.walletConnected) {
+        throw new Error('Web3 service not initialized or wallet not connected');
+      }
+      
+      // Call contract to award tokens
+      const result = await this.web3Service.rewardTokenContract.methods.awardTokens(
+        this.web3Service.userAddress,
+        amount
+      ).send({ from: this.web3Service.userAddress });
+      
+      return {
+        success: true,
+        amount,
+        reason,
+        transactionHash: result.transactionHash
+      };
+    } catch (error) {
+      console.error('Error awarding rewards:', error);
+      throw error;
+    }
+  }
+  
+  // Store pending rewards
+  async storePendingRewards(userId, amount, reason) {
+    try {
+      // Generate unique ID for pending reward
+      const pendingId = `pending-${userId}-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+      
+      // Store pending reward
+      const pendingReward = {
+        id: pendingId,
+        userId,
+        amount,
+        reason,
+        createdAt: new Date(),
+        status: 'pending'
+      };
+      
+      // Add to pending rewards
+      if (!this.pendingRewards.has(userId)) {
+        this.pendingRewards.set(userId, []);
+      }
+      
+      this.pendingRewards.get(userId).push(pendingReward);
+      
+      return {
+        success: true,
+        pendingId,
+        amount,
+        status: 'pending'
+      };
+    } catch (error) {
+      console.error('Error storing pending rewards:', error);
+      throw error;
+    }
+  }
+  
+  // Process pending rewards
+  async processPendingRewards(userId) {
+    try {
+      if (!this.web3Service || !this.web3Service.walletConnected) {
+        throw new Error('Web3 service not initialized or wallet not connected');
+      }
+      
+      // Get pending rewards for user
+      const pendingRewards = this.pendingRewards.get(userId) || [];
+      
+      if (pendingRewards.length === 0) {
+        return { success: true, processed: 0, message: 'No pending rewards' };
+      }
+      
+      const results = [];
+      let totalAmount = 0;
+      
+      // Calculate total amount
+      for (const reward of pendingRewards) {
+        totalAmount += reward.amount;
+      }
+      
+      // Award total amount  constructor() {
+    this.injuries = new Map(); // Player ID to injury status
+    
+    // Define injury types
+    this.injuryTypes = {
+      minor: { continuesPlaying: true, recoveryMatches: 0 },
+      serious: { continuesPlaying: false, recoveryMatches: 1 },
+      season: { continuesPlaying: false, recoveryMatches: 10 }
+    };
+  }
+  
+  // Apply injury to player
+  applyInjury(player, severity) {
+    let injuryType;
+    
+    // Determine injury type based on severity
+    if (severity === 1) {
+      injuryType = 'minor';
+    } else if (severity === 2) {
+      injuryType = 'serious';
+    } else {
+      injuryType = 'season';
+    }
+    
+    // Create injury record
+    const injury = {
+      type: injuryType,
+      appliedAt: new Date(),
+      recoveryMatches: this.injuryTypes[injuryType].recoveryMatches,
+      continuesPlaying: this.injuryTypes[injuryType].continuesPlaying
+    };
+    
+    // Record injury
+    this.injuries.set(player.id, injury);
+    
+    return injury;
+  }
+  
+  // Check if player is injured
+  isInjured(playerId) {
+    return this.injuries.has(playerId) && this.injuries.get(playerId).recoveryMatches > 0;
+  }
+  
+  // Update injury status after match
+  updateInjuries() {
+    for (const [playerId, injury] of this.injuries.entries()) {
+      if (injury.recoveryMatches > 0) {
+        injury.recoveryMatches--;
+        
+        // Remove injury if fully recovered
+        if (injury.recoveryMatches === 0) {
+          this.injuries.delete(playerId);
+        }
+      }
+    }
+  }
+}
+
+/**
+ * 6. User and Account Management
+ * Player profiles, authentication, and age verification
+ */
+class UserManagementSystem {
+  constructor() {
+    this.authService = new AuthenticationService();
+    this.userProfileService = new UserProfileService();
+    this.ageVerificationService = new AgeVerificationService();
+    this.kycService = new KYCService();
+    this.rewardsLockService = new RewardsLockService();
+    this.userPreferences = new UserPreferencesService();
+    this.analytics = new UserAnalyticsService();
+  }
+  
+  // Register new user
+  async registerUser(username, email, password, dateOfBirth) {
+    // Create user account
+    const user = await this.authService.registerUser(username, email, password);
+    
+    // Calculate age
+    const age = this._calculateAge(dateOfBirth);
+    
+    // Create user profile
+    await this.userProfileService.createProfile(user.id, {
+      username,
+      email,
+      dateOfBirth,
+      age,
+      createdAt: new Date(),
+      isUnderage: age < 18
+    });
+    
+    // Initialize age verification status
+    await this.ageVerificationService.initializeStatus(user.id, dateOfBirth);
+    
+    // Initialize rewards lock if underage
+    if (age < 18) {
+      await this.rewardsLockService.initializeUnderageUser(user.id, dateOfBirth);
+    }
+    
+    return user;
+  }
+  
+  // Calculate age from date of birth
+  _calculateAge(dateOfBirth) {
+    const dob = new Date(dateOfBirth);
+    const today = new Date();
+    let age = today.getFullYear() - dob.getFullYear();
+    const monthDiff = today.getMonth() - dob.getMonth();
+    
+    if (monthDiff < 0 || (monthDiff === 0 && today.getDate() < dob.getDate())) {
+      age--;
+    }
+    
+    return age;
+  }
+  
+  // Login user
+  async loginUser(username, password) {
+    // Authenticate user
+    const authResult = await this.authService.loginUser(username, password);
+    
+    // Get user profile
+    const profile = await this.userProfileService.getProfile(authResult.user.id);
+    
+    // Get age verification status
+    const ageStatus = await this.ageVerificationService.getStatus(authResult.user.id);
+    
+    // Get KYC status if applicable
+    let kycStatus = null;
+    if (profile.age >= 18) {
+      kycStatus = await this.kycService.getStatus(authResult.user.id);
+    }
+    
+    // Get rewards status
+    const rewardsStatus = await this.rewardsLockService.getStatus(authResult.user.id);
+    
+    // Record login for analytics
+    this.analytics.recordLogin(authResult.user.id);
+    
+    return {
+      ...authResult,
+      profile,
+      ageStatus,
+      kycStatus,
+      rewardsStatus
+    };
+  }
+  
+  // Update user's KYC status
+  async updateKYC(userId, kycData, documents) {
+    // Get user profile
+    const profile = await this.userProfileService.getProfile(userId);
+    
+    // Verify user is of legal age
+    if (profile.age < 18) {
+      throw new Error('KYC is only available for users 18 and older');
+    }
+    
+    // Submit KYC
+    const kycResult = await this.kycService.submitKYC(userId, kycData, documents);
+    
+    // If KYC approved, unlock any previously locked rewards
+    if (kycResult.status === 'approved') {
+      await this.rewardsLockService.unlockUserRewards(userId);
+    }
+    
+    return kycResult;
+  }
+  
+  // Check feature access based on age/KYC requirements
+  async checkFeatureAccess(userId, feature) {
+    // Get user profile
+    const profile = await this.userProfileService.getProfile(userId);
+    
+    // Get age verification status
+    const ageStatus = await this.ageVerificationService.getStatus(userId);
+    
+    // Get KYC status if applicable
+    let kycStatus = null;
+    if (profile.age >= 18) {
+      kycStatus = await this.kycService.getStatus(userId);
+    }
+    
+    // Define feature requirements
+    const featureRequirements = {
+      'gameplay': { 
+        requiresAge: false,
+        minimumAge: 0,
+        requiresKyc: false 
+      },
+      'chat': { 
+        requiresAge: true,
+        minimumAge: 13,
+        requiresKyc: false 
+      },
+      'rewards': { 
+        requiresAge: false,
+        minimumAge: 0,
+        requiresKyc: false 
+      },
+      'blockchain': { 
+        requiresAge: true,
+        minimumAge: 18,
+        requiresKyc: true
+      },
+      'marketplace': { 
+        requiresAge: true,
+        minimumAge: 18,
+        requiresKyc: true
+      },
+      'tournaments': { 
+        requiresAge: true,
+        minimumAge: 16,
+        requiresKyc: false
+      },
+      'nftCreation': {
+        requiresAge: true,
+        minimumAge: 13,
+        requiresKyc: false
+      },
+      'nftTrading': {
+        requiresAge: true,
+        minimumAge: 18,
+        requiresKyc: true
+      }
+    };
+    
+    const requirements = featureRequirements[feature] || { requiresAge: true, minimumAge: 18, requiresKyc: true };
+    
+    // Check if user meets requirements
+    const meetsAgeRequirement = !requirements.requiresAge || profile.age >= requirements.minimumAge;
+    const meetsKycRequirement = !requirements.requiresKyc || (kycStatus && kycStatus.status === 'approved');
+    
+    return {
+      hasAccess: meetsAgeRequirement && meetsKycRequirement,
+      meetsAgeRequirement,
+      meetsKycRequirement,
+      minimumAge: requirements.requiresAge ? requirements.minimumAge : null,
+      requiresKyc: requirements.requiresKyc
+    };
+  }
+}
+
+/**
+ * Age Verification Service
+ * Handles verification of user age and restrictions
+ */
+class AgeVerificationService {
+  constructor() {
+    this.ageStatuses = new Map(); // In a real implementation, this would be a database
+  }
+  
+  // Initialize age verification status for new user
+  async initializeStatus(userId, dateOfBirth) {
+    const dob = new Date(dateOfBirth);
+    const today = new Date();
+    let age = today.getFullYear() - dob.getFullYear();
+    const monthDiff = today.getMonth() - dob.getMonth();
+    
+    if (monthDiff < 0 || (monthDiff === 0 && today.getDate() < dob.getDate())) {
+      age--;
+    }
+    
+    // Calculate unlock date for underage users
+    let unlockDate = null;
+    if (age < 18) {
+      unlockDate = new Date(dob);
+      unlockDate.setFullYear(dob.getFullYear() + 18);
+    }
+    
+    // Create status
+    const status = {
+      userId,
+      dateOfBirth: dob,
+      age,
+      isUnderage: age < 18,
+      verified: false, // Requires verification
+      verificationMethod: null,
+      verificationDate: null,
+      unlockDate,
+      lastChecked: new Date()
+    };
+    
+    // Store status
+    this.ageStatuses.set(userId, status);
+    
+    return status;
+  }
+  
+  // Get current age verification status
+  async getStatus(userId) {
+    const status = this.ageStatuses.get(userId);
+    
+    if (!status) {
+      throw new Error('User age verification status not found');
+    }
+    
+    return status;
+  }
+  
+  // Verify age using document
+  async verifyWithDocument(userId, documentType, documentData) {
+    const status = this.ageStatuses.get(userId);
+    
+    if (!status) {
+      throw new Error('User age verification status not found');
+    }
+    
+    // In a real implementation, this would call an age verification service
+    // For this example, we'll simulate verification
+    
+    // Mark as verified
+    status.verified = true;
+    status.verificationMethod = documentType;
+    status.verificationDate = new Date();
+    status.lastChecked = new Date();
+    
+    // Update stored status
+    this.ageStatuses.set(userId, status);
+    
+    return {
+      success: true,
+      status
+    };
+  }
+  
+  // Check if a feature is allowed based on age
+  async isFeatureAllowed(userId, feature) {
+    const status = this.ageStatuses.get(userId);
+    
+    if (!status) {
+      throw new Error('User age verification status not found');
+    }
+    
+    // Define age restrictions for features
+    const ageRestrictions = {
+      'gambling': 18,
+      'mature_content': 18,
+      'social_media': 13,
+      'purchases': 16,
+      'blockchain_trading': 18
+    };
+    
+    const requiredAge = ageRestrictions[feature] || 0;
+    
+    return {
+      allowed: status.age >= requiredAge,
+      requiredAge,
+      currentAge: status.age
+    };
+  }
+  
+  // Update age status (e.g., on birthday)
+  async updateAgeStatus(userId) {
+    const status = this.ageStatuses.get(userId);
+    
+    if (!status) {
+      throw new Error('User age verification status not found');
+    }
+    
+    // Recalculate age
+    const today = new Date();
+    let age = today.getFullYear() - status.dateOfBirth.getFullYear();
+    const monthDiff = today.getMonth() - status.dateOfBirth.getMonth();
+    
+    if (monthDiff < 0 || (monthDiff === 0 && today.getDate() < status.dateOfBirth.getDate())) {
+      age--;
+    }
+    
+    // Update status
+    status.age = age;
+    status.isUnderage = age < 18;
+    status.lastChecked = today;
+    
+    // Clear unlock date if now 18+
+    if (age >= 18) {
+      status.isUnderage = false;
+    }
+    
+    // Update stored status
+    this.ageStatuses.set(userId, status);
+    
+    return status;
+  }
+}
+
+/**
+ * KYC Service
+ * Handles KYC verification for users 18 and older
+ */
+class KYCService {
+  constructor() {
+    this.kycStatuses = new Map(); // In a real implementation, this would be a database
+    this.kycRequests = new Map(); // Track KYC requests
+    this.kycDocuments = new Map(); // Store document references
+  }
+  
+  // Get KYC status
+  async getStatus(userId) {
+    return this.kycStatuses.get(userId) || { status: 'not_started' };
+  }
+  
+  // Submit KYC verification
+  async submitKYC(userId, kycData, documents) {
+    // Create KYC request
+    const requestId = `kyc-${userId}-${Date.now()}`;
+    
+    const request = {
+      id: requestId,
+      userId,
+      data: kycData,
+      documentsCount: documents.length,
+      submittedAt: new Date(),
+      status: 'pending'
+    };
+    
+    // Store document references
+    this.kycDocuments.set(requestId, documents);
+    
+    // Store request
+    this.kycRequests.set(requestId, request);
+    
+    // Update KYC status
+    const kycStatus = {
+      userId,
+      status: 'pending',
+      lastUpdated: new Date(),
+      requestId
+    };
+    
+    this.kycStatuses.set(userId, kycStatus);
+    
+    // In a real implementation, this would call an external KYC service
+    // For this example, we'll simulate verification after a delay
+    setTimeout(() => {
+      this._processKYCVerification(requestId);
+    }, 5000); // 5 second delay to simulate processing
+    
+    return kycStatus;
+  }
+  
+  // Process KYC verification (simulated)
+  async _processKYCVerification(requestId) {
+    const request = this.kycRequests.get(requestId);
+    
+    if (!request) {
+      return;
+    }
+    
+    // Simulate KYC approval (90% chance of success)
+    const isApproved = Math.random() < 0.9;
+    
+    // Update request status
+    request.status = isApproved ? 'approved' : 'rejected';
+    request.processedAt = new Date();
+    
+    // Update KYC status
+    const kycStatus = this.kycStatuses.get(request.userId);
+    kycStatus.status = request.status;
+    kycStatus.lastUpdated = new Date();
+    
+    if (!isApproved) {
+      kycStatus.rejectionReason = 'Documents could not be verified';
+    }
+    
+    // Clean up documents if approved
+    if (isApproved) {
+      this.kycDocuments.delete(requestId);
+    }
+    
+    console.log(`KYC for user ${request.userId} ${request.status}`);
+  }
+}
+
+/**
+ * Rewards Lock Service
+ * Handles locking and unlocking rewards for underage users
+ */
+class RewardsLockService {
+  constructor() {
+    this.lockedRewards = new Map(); // User ID to locked rewards
+    this.stakingYield = 0.08; // 8% annual yield
+    this.compoundingFrequency = 'daily'; // Compounding frequency
+  }
+  
+  // Initialize underage user
+  async initializeUnderageUser(userId, dateOfBirth) {
+    // Calculate unlock date (18th birthday)
+    const unlockDate = new Date(dateOfBirth);
+    unlockDate.setFullYear(unlockDate.getFullYear() + 18);
+    
+    // Create locked rewards record
+    const lockedReward = {
+      userId,
+      locked: 0, // Initial locked amount
+      stakingYield: this.stakingYield,
+      compoundingFrequency: this.compoundingFrequency,
+      unlockDate,
+      projectedValue: 0,
+      transactions: [],
+      createdAt: new Date(),
+      updatedAt: new Date()
+    };
+    
+    // Store record
+    this.lockedRewards.set(userId, lockedReward);
+    
+    return lockedReward;
+  }
+  
+  // Get locked rewards status
+  async getStatus(userId) {
+    return this.lockedRewards.get(userId) || null;
+  }
+  
+  // Lock rewards for underage user
+  async lockRewards(userId, amount, reason) {
+    const lockedReward = this.lockedRewards.get(userId);
+    
+    if (!lockedReward) {
+      throw new Error('Locked rewards record not found');
+    }
+    
+    // Add to locked amount
+    lockedReward.locked += amount;
+    
+    // Record transaction
+    lockedReward.transactions.push({
+      type: 'lock',
+      amount,
+      reason,
+      timestamp: new Date()
+    });
+    
+    // Update projected value
+    this._updateProjectedValue(lockedReward);
+    
+    // Update record
+    lockedReward.updatedAt = new Date();
+    this.lockedRewards.set(userId, lockedReward);
+    
+    return lockedReward;
+  }
+  
+  // Update projected value based on staking yield
+  _updateProjectedValue(lockedReward) {
+    // Calculate time until unlock in years
+    const now = new Date();
+    const yearsUntilUnlock = (lockedReward.unlockDate - now) / (365.25 * 24 * 60 * 60 * 1000);
+    
+    if (yearsUntilUnlock <= 0) {
+      // User is now 18 or older
+      lockedReward.projectedValue = lockedReward.locked;
+      return;
+    }
+    
+    // Calculate compound interest
+    const principal = lockedReward.locked;
+    const rate = lockedReward.stakingYield;
+    
+    // Convert compounding frequency to number of times per year
+    let compoundsPerYear;
+    switch (lockedReward.compoundingFrequency) {
+      case 'daily':
+        compoundsPerYear = 365;
+        break;
+      case 'weekly':
+        compoundsPerYear = 52;
+        break;
+      case 'monthly':
+        compoundsPerYear = 12;
+        break;
+      case 'quarterly':
+        compoundsPerYear = 4;
+        break;
+      default:
+        compoundsPerYear = 1; // Annual
+    }
+    
+    // Compound interest formula: A = P(1 + r/n)^(nt)
+    const compoundedAmount = principal * Math.pow(
+      (1 + rate / compoundsPerYear),
+      compoundsPerYear * yearsUntilUnlock
+    );
+    
+    lockedReward.projectedValue = compoundedAmount;
+  }
+  
+  // Unlock rewards when user turns 18
+  async unlockUserRewards(userId) {
+    const lockedReward = this.lockedRewards.get(userId);
+    
+    if (!lockedReward) {
+      throw new Error('Locked rewards record not found');
+    }
+    
+    // Update projected value one last time
+    this._updateProjectedValue(lockedReward);
+    
+    // Get final amount to unlock
+    const amountToUnlock = lockedReward.projectedValue;
+    
+    // Record transaction
+    lockedReward.transactions.push({
+      type: 'unlock',
+      amount: amountToUnlock,
+      reason: 'Age restriction lifted',
+      timestamp: new Date()
+    });
+    
+    // Reset locked amount
+    lockedReward.locked = 0;
+    lockedReward.projectedValue = 0;
+    
+    // Update record
+    lockedReward.updatedAt = new Date();
+    this.lockedRewards.set(userId, lockedReward);
+    
+    return {
+      userId,
+      unlockedAmount: amountToUnlock,
+      transaction: lockedReward.transactions[lockedReward.transactions.length - 1]
+    };
+  }
+  
+  // Get locked rewards history
+  async getLockedRewardsHistory(userId) {
+    const lockedReward = this.lockedRewards.get(userId);
+    
+    if (!lockedReward) {
+      throw new Error('Locked rewards record not found');
+    }
+    
+    return {
+      userId,
+      locked: lockedReward.locked,
+      projectedValue: lockedReward.projectedValue,
+      unlockDate: lockedReward.unlockDate,
+      transactions: lockedReward.transactions,
+      yield: lockedReward.stakingYield * 100 + '%',
+      compoundingFrequency: lockedReward.compoundingFrequency
+    };
+  }
+}
+
+/**
+ * 7. Networking and Multiplayer
+ * Systems for online play and matchmaking
+ */
+class NetworkingSystem {
+  constructor() {
+    this.socketManager = new SocketManager();
+    this.matchmaking = new MatchmakingService();
+    this.roomManager = new GameRoomManager();
+    this.stateSync = new StateSynchronizer();
+    this.lagCompensation = new LagCompensationSystem();
+  }
+  
+  // Initialize networking
+  initialize(userId, username) {
+    this.socketManager.initialize(userId, username);
+    this.matchmaking.initialize(this.socketManager);
+    this.roomManager.initialize(this.socketManager);
+    this.stateSync.initialize(this.socketManager);
+  }
+  
+  // Find a match
+  async findMatch(options) {
+    return await this.matchmaking.findMatch(options);
+  }
+  
+  // Create a private room
+  async createPrivateRoom(options) {
+    return await this.roomManager.createRoom(options);
+  }
+  
+  // Join room by code
+  async joinRoomByCode(roomCode) {
+    return await this.roomManager.joinRoomByCode(roomCode);
+  }
+  
+  // Handle game state updates
+  updateGameState(gameState) {
+    this.stateSync.sendGameState(gameState);
+  }
+}
+
+/**
+ * 8. Content Management
+ * Systems for managing game assets and content
+ */
+class ContentManagementSystem {
+  constructor() {
+    this.assetLoader = new AssetLoader();
+    this.cardTemplates = new CardTemplateManager();
+    this.teamData = new TeamDataManager();
+    this.playerData = new PlayerDataManager();
+    this.formationTemplates = new FormationTemplateManager();
+    this.customizationManager = new CustomizationManager();
+    this.userGeneratedContent = new UserGeneratedContentManager();
+  }
+  
+  // Load necessary assets
+  async loadAssets() {
+    await this.assetLoader.loadCoreTileset();
+    await this.assetLoader.loadPlayerSprites();
+    await this.assetLoader.loadUIElements();
+    await this.assetLoader.loadAnimations();
+    await this.assetLoader.loadSoundEffects();
+  }
+  
+  // Get card template
+  getCardTemplate(position) {
+    return this.cardTemplates.getTemplate(position);
+  }
+  
+  // Get team data
+  getTeamData(teamId) {
+    return this.teamData.getTeam(teamId);
+  }
+  
+  // Get formation template
+  getFormationTemplate(formationName) {
+    return this.formationTemplates.getFormation(formationName);
+  }
+  
+  // Create custom player card from user photo
+  async createCustomPlayer(userId, photoData, playerDetails) {
+    return await this.userGeneratedContent.createPlayerCard(userId, photoData, playerDetails);
+  }
+}
+
+/**
+ * 9. Game Progression
+ * Systems for player progression, leagues, and tournaments
+ */
+class GameProgressionSystem {
+  constructor() {
+    this.seasonManager = new SeasonManager();
+    this.leagueSystem = new LeagueSystem();
+    this.tournamentManager = new TournamentManager();
+    this.challengeSystem = new ChallengeSystem();
+    this.achievementSystem = new AchievementSystem();
+    this.playerProgression = new PlayerProgressionSystem();
+  }
+  
+  // Initialize player progression
+  initializePlayerProgression(userId) {
+    this.playerProgression.initialize(userId);
+    this.achievementSystem.initialize(userId);
+  }
+  
+  // Start new season
+  startNewSeason(userId) {
+    return this.seasonManager.startNewSeason(userId);
+  }
+  
+  // Join league
+  joinLeague(userId, leagueId) {
+    return this.leagueSystem.joinLeague(userId, leagueId);
+  }
+  
+  // Create tournament
+  createTournament(options) {
+    return this.tournamentManager.createTournament(options);
+  }
+  
+  // Get active challenges
+  getActiveChallenges(userId) {
+    return this.challengeSystem.getActiveChallenges(userId);
+  }
+  
+  // Complete challenge
+  completeChallenge(userId, challengeId) {
+    return this.challengeSystem.completeChallenge(userId, challengeId);
+  }
+}
+
+/**
+ * 10. Integration layer
+ * Main application class that connects all systems
+ */
+class FootballChessGame {
+  constructor() {
+    // Core game systems
+    this.gameCore = new GameCore();
+    this.ui = null; // Will be initialized based on platform
+    
+    // Supporting systems
+    this.blockchainIntegration = new BlockchainIntegration();
+    this.paymentSystem = new PaymentProcessingSystem();
+    this.userSystem = new UserManagementSystem();
+    this.networkingSystem = new NetworkingSystem();
+    this.contentSystem = new ContentManagementSystem();
+    this.progressionSystem = new GameProgressionSystem();
+    
+    // Configuration
+    this.config = null;
+    this.currentUser = null;
+  }
+  
+  // Initialize the game
+  async initialize(platform, config) {
+    this.config = config;
+    
+    // Initialize UI based on platform
+    this.ui = new UserInterfaceSystem(platform);
+    await this.ui.initializeUI();
+    
+    // Initialize other systems
+    await this.contentSystem.loadAssets();
+    
+    console.log(`FootballChess initialized on ${platform} platform`);
+  }
+  
+  // User login
+  async login(username, password) {
+    try {
+      const loginResult = await this.userSystem.loginUser(username, password);
+      this.currentUser = loginResult;
+      
+      // Initialize user-specific systems
+      this.networkingSystem.initialize(loginResult.user.id, loginResult.user.username);
+      this.progressionSystem.initializePlayerProgression(loginResult.user.id);
+      
+      // Initialize blockchain if user has access
+      const blockchainAccess = await this.userSystem.checkFeatureAccess(
+        loginResult.user.id,
+        'blockchain'
+      );
+      
+      if (blockchainAccess.hasAccess) {
+        await this.blockchainIntegration.initialize({
+          userId: loginResult.user.id
+        });
+      }
+      
+      return loginResult;
+    } catch (error) {
+      console.error('Login failed:', error);
+      throw error;
+    }
+  }
+  
+  // Start a new match
+  async startMatch(options) {
+    // Initialize the game grid and rules
+    this.gameCore.initialize();
+    
+    // Set up teams
+    await this._setupTeams(options.homeTeam, options.awayTeam);
+    
+    // Start networking if online match
+    if (options.isOnline) {
+      if (options.isPrivate) {
+        await this.networkingSystem.createPrivateRoom({
+          teams: [options.homeTeam, options.awayTeam]
+        });
+      } else {
+        await this.networkingSystem.findMatch({
+          team: options.homeTeam
+        });
+      }
+    }
+    
+    // Render initial state
+    this.ui.updateUI(this.gameCore.match.getState());
+  }
+  
+  // Set up teams for match
+  async _setupTeams(homeTeam, awayTeam) {
+    // Load team data
+    const homeTeamData = await this.contentSystem.getTeamData(homeTeam.id);
+    const awayTeamData = await this.contentSystem.getTeamData(awayTeam.id);
+    
+    // Set up formations
+    const homeFormation = this.contentSystem.getFormationTemplate(homeTeam.formation);
+    const awayFormation = this.contentSystem.getFormationTemplate(awayTeam.formation);
+    
+    // Initialize teams
+    this.gameCore.teams.setupTeam('home', homeTeamData, homeFormation, homeTeam.players);
+    this.gameCore.teams.setupTeam('away', awayTeamData, awayFormation, awayTeam.players);
+  }
+  
+  // Process player's move
+  async makeMove(playerId, destination) {
+    // Check if it's player's turn
+    if (!this.gameCore.match.isPlayerTurn(this.currentUser.id)) {
+      throw new Error('Not your turn');
+    }
+    
+    // Get player current position
+    const playerCard = this.gameCore.players.getPlayer(playerId);
+    const source = playerCard.position;
+    
+    // Process move
+    const moveResult = this.gameCore.processMove(playerCard, source, destination);
+    
+    // Update UI
+    this.ui.updateUI(this.gameCore.match.getState());
+    
+    // Sync move to opponent if online
+    if (this.gameCore.match.isOnlineMatch()) {
+      this.networkingSystem.updateGameState({
+        type: 'move',
+        playerId,
+        source,
+        destination,
+        result: moveResult
+      });
+    }
+    
+    return moveResult;
+  }
+  
+  // Process ball action (pass, shoot)
+  async executeBallAction(playerId, action, target) {
+    // Check if player has the ball
+    const playerCard = this.gameCore.players.getPlayer(playerId);
+    
+    if (!playerCard.hasBall) {
+      throw new Error('Player does not have the ball');
+    }
+    
+    // Process ball action
+    const actionResult = this.gameCore.processBallAction(playerCard, action, target);
+    
+    // Update UI
+    this.ui.updateUI(this.gameCore.match.getState());
+    
+    // Sync action to opponent if online
+    if (this.gameCore.match.isOnlineMatch()) {
+      this.networkingSystem.updateGameState({
+        type: 'ballAction',
+        playerId,
+        action,
+        target,
+        result: actionResult
+      });
+    }
+    
+    return actionResult;
+  }
+  
+  // Create custom player card with photo
+  async createCustomPlayer(photoData, playerDetails) {
+    // Check feature access
+    const access = await this.userSystem.checkFeatureAccess(
+      this.currentUser.user.id,
+      'nftCreation'
+    );
+    
+    if (!access.hasAccess) {
+      throw new Error(`Feature not available to this user.// FootballChess Game Architecture Overview
+// Top-level file describing the integrated system components
+
+/**
+ * FootballChess Game Architecture
+ * 
+ * A comprehensive chess-like card game based on football, with cross-platform compatibility,
+ * blockchain integration, and real-world football elements.
+ */
+
+// Core Components
+
+/**
+ * 1. Game Core
+ * The fundamental game mechanics and rules engine
+ */
+class GameCore {
+  constructor() {
+    this.grid = new FootballGrid();
+    this.players = new PlayerManager();
+    this.teams = new TeamManager();
+    this.rules = new RulesEngine();
+    this.match = new MatchState();
+    this.cards = new CardSystem();
+    this.movement = new MovementEngine();
+    this.referee = new RefereeSystem();
+  }
+  
+  // Initialize game
+  initialize() {
+    // Set up game with chosen teams and formations
+  }
+  
+  // Handle moves and game flow
+  processMove(player, source, destination) {
+    // Validate and process player's move
+  }
+  
+  // Handle ball possession changes, passes, and shots
+  processBallAction(player, action, target) {
+    // Process ball-related actions
+  }
+}
+
+/**
+ * 2. User Interface Systems
+ * Cross-platform UI implementation for web, mobile and desktop
+ */
+class UserInterfaceSystem {
+  constructor(platform) {
+    this.platform = platform; // 'web', 'mobile', or 'desktop'
+    this.renderer = this._createRenderer(platform);
+    this.inputHandler = this._createInputHandler(platform);
+    this.uiComponents = {};
+    this.animations = new AnimationSystem();
+    this.soundSystem = new SoundSystem();
+  }
+  
+  // Create appropriate renderer based on platform
+  _createRenderer(platform) {
+    switch(platform) {
+      case 'web':
+        return new WebRenderer();
+      case 'mobile':
+        return new MobileRenderer();
+      case 'desktop':
+        return new DesktopRenderer();
+      default:
+        throw new Error(`Unsupported platform: ${platform}`);
+    }
+  }
+  
+  // Create input handler for platform
+  _createInputHandler(platform) {
+    switch(platform) {
+      case 'web':
+        return new WebInputHandler();
+      case 'mobile':
+        return new MobileInputHandler();
+      case 'desktop':
+        return new DesktopInputHandler();
+      default:
+        throw new Error(`Unsupported platform: ${platform}`);
+    }
+  }
+  
+  // Initialize UI components
+  initializeUI() {
+    this.uiComponents = {
+      field: new FootballFieldUI(this.renderer),
+      cards: new CardUI(this.renderer),
+      controls: new ControlsUI(this.renderer),
+      stats: new StatsUI(this.renderer),
+      menu: new MenuUI(this.renderer),
+      modals: new ModalSystem(this.renderer)
+    };
+  }
+  
+  // Update UI based on game state
+  updateUI(gameState) {
+    // Update all UI components
+    Object.values(this.uiComponents).forEach(component => {
+      component.update(gameState);
+    });
+    
+    // Trigger any necessary animations
+    this.animations.processAnimations(gameState);
+    
+    // Play appropriate sounds
+    this.soundSystem.processAudioEvents(gameState);
+  }
+}
+
+/**
+ * 3. Blockchain Integration
+ * Systems for NFT cards, marketplace, and rewards
+ */
+class BlockchainIntegration {
+  constructor() {
+    this.web3Service = new SmartContractSystem();
+    this.nftSystem = new NFTSystem();
+    this.marketplace = new MarketplaceSystem();
+    this.rewardsSystem = new RewardsSystem();
+    this.userAccount = new UserAccount();
+    this.tournaments = new TournamentSystem(this.web3Service);
+    this.ageVerification = new BlockchainAgeVerification(this.web3Service);
+    this.messaging = new EncryptedMessagingSystem();
+  }
+  
+  // Initialize blockchain connection
+  async initialize(config) {
+    await this.web3Service.initialize();
+    await this.messaging.initialize(this.userAccount.username);
+    
+    // Initialize other systems
+    this.nftSystem.initialize(this.web3Service);
+    this.marketplace.initialize(this.web3Service);
+    this.rewardsSystem.initialize(this.web3Service, this.userAccount);
+    this.tournaments.initialize();
+    this.ageVerification.initialize();
+  }
+  
+  // Connect user wallet
+  async connectWallet() {
+    return await this.web3Service.connectWallet();
+  }
+}
+
+/**
+ * 4. Payment System
+ * Multi-currency payment processing for in-game transactions
+ */
+class PaymentProcessingSystem {
+  constructor() {
+    this.paymentService = new PaymentService({
+      stripe: { secretKey: process.env.STRIPE_SECRET_KEY },
+      paypal: { clientId: process.env.PAYPAL_CLIENT_ID, clientSecret: process.env.PAYPAL_CLIENT_SECRET },
+      googlePay: { merchantId: process.env.GOOGLE_PAY_MERCHANT_ID },
+      samsungPay: { serviceId: process.env.SAMSUNG_PAY_SERVICE_ID },
+      crypto: { 
+        providerUrl: process.env.CRYPTO_PROVIDER_URL,
+        supportedCurrencies: ['BTC', 'ETH', 'USDT', 'USDC'],
+        addresses: {
+          btc: process.env.BTC_PAYMENT_ADDRESS,
+          eth: process.env.ETH_PAYMENT_ADDRESS,
+          usdt: process.env.USDT_PAYMENT_ADDRESS,
+          usdc: process.env.USDC_PAYMENT_ADDRESS
+        }
+      },
+      uniswap: { providerUrl: process.env.UNISWAP_PROVIDER_URL },
+      directDebit: { baseUrl: process.env.DIRECT_DEBIT_BASE_URL },
+      bankTransfer: {
+        accountName: process.env.BANK_ACCOUNT_NAME,
+        accountNumber: process.env.BANK_ACCOUNT_NUMBER,
+        sortCode: process.env.BANK_SORT_CODE,
+        iban: process.env.BANK_IBAN,
+        bic: process.env.BANK_BIC,
+        bankName: process.env.BANK_NAME
+      }
+    });
+  }
+  
+  // Process payment
+  async processPayment(method, amount, currency, description, metadata) {
+    const paymentDetails = {
+      amount,
+      currency,
+      description,
+      userID: metadata.userId,
+      purchaseType: metadata.purchaseType,
+      ...metadata
+    };
+    
+    return await this.paymentService.processPayment(paymentDetails, method);
+  }
+  
+  // Get available payment methods for user
+  async getAvailablePaymentMethods(userId) {
+    return await this.paymentService.getAvailablePaymentMethods(userId);
+  }
+}
+
+/**
+ * 5. Game Mechanics
+ * Implementation of football-specific chess-like mechanics
+ */
+
+// Football grid system for the game board
+class FootballGrid {
+  constructor() {
+    // Create grid based on football pitch divided into 4 sections
+    this.sections = 4;
+    this.squares = [];
+    this.goalAreas = { home: [], away: [] };
+    
+    // Initialize grid
+    this._initializeGrid();
+  }
+  
+  // Set up grid structure
+  _initializeGrid() {
+    // Create grid with proper dimensions
+    // Implement logic for grid creation and goal areas
+  }
+  
+  // Get square at coordinates
+  getSquare(x, y) {
+    // Return square at given coordinates
+  }
+  
+  // Check if position is within bounds
+  isValidPosition(x, y) {
+    // Check if position exists on grid
+  }
+}
+
+// Movement patterns for different player positions
+class MovementEngine {
+  constructor() {
+    // Define movement patterns for each position
+    this.movementPatterns = {
+      goalkeeper: { pattern: 'rook', range: 2, special: 'dive' },
+      defender: { pattern: 'bishop', range: 3, special: 'tackle' },
+      midfielder: { pattern: 'queen', range: 4, special: 'pass' },
+      forward: { pattern: 'knight', range: 3, special: 'shoot' }
+    };
+  }
+  
+  // Get valid moves for a player card
+  getValidMoves(player, currentPosition, gameState) {
+    // Calculate valid moves based on position type
+    const positionType = player.position;
+    const pattern = this.movementPatterns[positionType].pattern;
+    const range = this.movementPatterns[positionType].range;
+    
+    // Return array of valid destination coordinates
+  }
+  
+  // Check if move is valid
+  isValidMove(player, source, destination, gameState) {
+    // Validate move against movement rules
+  }
+}
+
+// Game rules engine
+class RulesEngine {
+  constructor() {
+    this.turnSystem = new TurnSystem();
+    this.foulRules = new FoulRules();
+    this.scoringRules = new ScoringRules();
+    this.possessionRules = new PossessionRules();
+    this.injurySystem = new InjurySystem();
+  }
+  
+  // Initialize rules for a match
+  initializeMatch() {
+    this.turnSystem.initialize(3); // 3 moves per turn
+    this.foulRules.initialize();
+    this.scoringRules.initialize();
+  }
+  
+  // Check for fouls
+  checkForFouls(action, gameState) {
+    return this.foulRules.checkFoul(action, gameState);
+  }
+  
+  // Check for goals
+  checkForGoal(action, gameState) {
+    return this.scoringRules.checkGoal(action, gameState);
+  }
+  
+  // Handle possession changes
+  resolveSquareConflict(square, gameState) {
+    return this.possessionRules.resolveConflict(square, gameState);
+  }
+}
+
+// Referee system for cards and fouls
+class RefereeSystem {
+  constructor() {
+    this.yellowCards = new Map(); // Player ID to count
+    this.redCards = new Map(); // Player ID to boolean
+    this.fouls = []; // Foul history
+  }
+  
+  // Process a foul
+  processFoul(player, foulType, inScoringPosition) {
+    // Determine card color based on foul type and position
+    let cardColor = null;
+    
+    if (foulType === 'soft') {
+      cardColor = inScoringPosition ? 'yellow' : 'warning';
+    } else if (foulType === 'hard') {
+      cardColor = inScoringPosition ? 'red' : 'yellow';
+    } else if (foulType === 'injury') {
+      cardColor = 'red';
+    }
+    
+    // Issue card
+    if (cardColor === 'yellow') {
+      this.issueYellowCard(player);
+    } else if (cardColor === 'red') {
+      this.issueRedCard(player);
+    }
+    
+    // Record foul
+    this.fouls.push({
+      player,
+      foulType,
+      inScoringPosition,
+      cardColor,
+      timestamp: new Date()
+    });
+    
+    return { cardColor, ejected: cardColor === 'red' };
+  }
+  
+  // Issue yellow card
+  issueYellowCard(player) {
+    const currentCount = this.yellowCards.get(player.id) || 0;
+    this.yellowCards.set(player.id, currentCount + 1);
+    
+    // Check for second yellow -> red
+    if (currentCount + 1 >= 2) {
+      this.issueRedCard(player);
+      return { ejected: true };
+    }
+    
+    return { ejected: false };
+  }
+  
+  // Issue red card
+  issueRedCard(player) {
+    this.redCards.set(player.id, true);
+    return { ejected: true };
+  }
+}
+
+// Injury system
+class InjurySystem {
+  constructor() {
+    this.injuries = new Map(); // Player ID to injury status
+    
+    // Define injury types
+    this.injuryTypes = {
+      minor: { continuesPlaying: true, recoveryMatches: 0 },
+      serious: { continuesPlaying: false, recoveryMatches: 1 },
+      season: { continuesPlaying: false, recoveryMatches: 10 }
+    };
+  }

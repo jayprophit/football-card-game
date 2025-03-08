@@ -1,0 +1,565 @@
+/* Clash of Clans inspired game UI */
+
+/* Base game container */
+.clash-game-container {
+  width: 100%;
+  max-width: 1200px;
+  margin: 0 auto;
+  position: relative;
+  font-family: 'Supercell-Magic', 'Arial Rounded MT Bold', Arial, sans-serif;
+}
+
+/* Custom font face for Clash-like text */
+@font-face {
+  font-family: 'Supercell-Magic';
+  src: url('/fonts/supercell-magic.woff2') format('woff2');
+  font-weight: normal;
+  font-style: normal;
+}
+
+/* 3D Game container */
+.clash-game-board-3d {
+  width: 100%;
+  height: 70vh;
+  border-radius: 14px;
+  overflow: hidden;
+  box-shadow: 0 10px 50px rgba(0, 0, 0, 0.4);
+  position: relative;
+  border: 4px solid #333;
+}
+
+/* Top header bar */
+.clash-header {
+  background: linear-gradient(to bottom, #333 0%, #111 100%);
+  color: #f8f8f8;
+  padding: 12px 20px;
+  border-radius: 12px 12px 0 0;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  box-shadow: 0 3px 10px rgba(0,0,0,0.2);
+  border: 2px solid #444;
+  border-bottom: 4px solid #ffb142;
+  position: relative;
+  z-index: 5;
+}
+
+.clash-header h1 {
+  font-size: 24px;
+  text-shadow: 0 2px 2px rgba(0,0,0,0.6), 0 0 10px rgba(255,255,255,0.2);
+  margin: 0;
+  letter-spacing: 1px;
+}
+
+/* Resource bar (scores, etc) */
+.clash-resources {
+  background: linear-gradient(to bottom, #111 0%, #222 100%);
+  padding: 12px 16px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  border-bottom: 3px solid #ffb142;
+}
+
+.resource-item {
+  display: flex;
+  align-items: center;
+  color: white;
+  font-size: 16px;
+  text-shadow: 0 1px 2px rgba(0,0,0,0.8);
+}
+
+.resource-item img {
+  height: 24px;
+  margin-right: 8px;
+}
+
+/* Team score display */
+.clash-score-display {
+  display: flex;
+  justify-content: center;
+  position: relative;
+  margin: -30px auto 20px;
+  z-index: 10;
+  width: 80%;
+  max-width: 400px;
+}
+
+.clash-score-panel {
+  background: linear-gradient(to bottom, #2c3e50 0%, #1a2530 100%);
+  border: 3px solid #ffb142;
+  border-radius: 10px;
+  padding: 10px 20px;
+  box-shadow: 0 5px 15px rgba(0,0,0,0.3);
+  color: white;
+  display: flex;
+  justify-content: center;
+  gap: 20px;
+  width: 100%;
+}
+
+.clash-team {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.clash-team-logo {
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  background: #eee;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: 2px solid #ffb142;
+  overflow: hidden;
+}
+
+.clash-team-logo img {
+  width: 85%;
+  height: 85%;
+  object-fit: contain;
+}
+
+.clash-score {
+  font-size: 28px;
+  font-weight: bold;
+  color: #ffb142;
+  text-shadow: 0 2px 4px rgba(0,0,0,0.5);
+}
+
+.clash-vs {
+  font-size: 18px;
+  align-self: center;
+  color: #ffb142;
+}
+
+/* Game controls */
+.clash-controls {
+  display: flex;
+  justify-content: center;
+  gap: 12px;
+  padding: 16px;
+  background: linear-gradient(to bottom, #222 0%, #111 100%);
+  border-top: 3px solid #ffb142;
+  border-radius: 0 0 12px 12px;
+}
+
+.clash-btn {
+  background: linear-gradient(to bottom, #ffb142 0%, #f39c12 100%);
+  border: none;
+  border-radius: 8px;
+  color: #fff;
+  padding: 10px 16px;
+  font-weight: bold;
+  font-family: 'Supercell-Magic', 'Arial Rounded MT Bold', Arial, sans-serif;
+  text-shadow: 0 1px 2px rgba(0,0,0,0.5);
+  cursor: pointer;
+  transition: all 0.2s ease;
+  box-shadow: 0 3px 0 #d35400, 0 4px 6px rgba(0,0,0,0.4);
+  position: relative;
+  top: 0;
+}
+
+.clash-btn:hover {
+  background: linear-gradient(to bottom, #f39c12 0%, #e67e22 100%);
+  box-shadow: 0 4px 0 #d35400, 0 5px 8px rgba(0,0,0,0.4);
+}
+
+.clash-btn:active {
+  top: 3px;
+  box-shadow: 0 0 0 #d35400, 0 1px 2px rgba(0,0,0,0.4);
+}
+
+.clash-btn:disabled {
+  background: linear-gradient(to bottom, #95a5a6 0%, #7f8c8d 100%);
+  box-shadow: 0 3px 0 #596566, 0 4px 6px rgba(0,0,0,0.2);
+  cursor: not-allowed;
+}
+
+.clash-btn.primary {
+  background: linear-gradient(to bottom, #3498db 0%, #2980b9 100%);
+  box-shadow: 0 3px 0 #1b557a, 0 4px 6px rgba(0,0,0,0.4);
+}
+
+.clash-btn.primary:hover {
+  background: linear-gradient(to bottom, #2980b9 0%, #2471a3 100%);
+}
+
+.clash-btn.primary:active {
+  box-shadow: 0 0 0 #1b557a, 0 1px 2px rgba(0,0,0,0.4);
+}
+
+.clash-btn.danger {
+  background: linear-gradient(to bottom, #e74c3c 0%, #c0392b 100%);
+  box-shadow: 0 3px 0 #962d22, 0 4px 6px rgba(0,0,0,0.4);
+}
+
+.clash-btn.danger:hover {
+  background: linear-gradient(to bottom, #c0392b 0%, #a33025 100%);
+}
+
+.clash-btn.danger:active {
+  box-shadow: 0 0 0 #962d22, 0 1px 2px rgba(0,0,0,0.4);
+}
+
+/* Card selection styles */
+.clash-selection-indicator {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  border-radius: 50%;
+  border: 4px solid #ffb142;
+  animation: clash-pulse 1.5s infinite;
+  pointer-events: none;
+}
+
+@keyframes clash-pulse {
+  0% { transform: scale(0.95); opacity: 1; }
+  50% { transform: scale(1.1); opacity: 0.8; }
+  100% { transform: scale(0.95); opacity: 1; }
+}
+
+.clash-valid-move {
+  position: absolute;
+  width: 60%;
+  height: 60%;
+  border-radius: 50%;
+  background-color: rgba(46, 204, 113, 0.5);
+  pointer-events: none;
+}
+
+/* Game info overlay */
+.clash-game-info {
+  position: absolute;
+  top: 16px;
+  left: 16px;
+  background: rgba(0, 0, 0, 0.7);
+  color: white;
+  padding: 10px;
+  border-radius: 8px;
+  border: 2px solid #ffb142;
+  font-size: 14px;
+  max-width: 200px;
+  pointer-events: none;
+}
+
+.clash-game-log {
+  position: absolute;
+  bottom: 16px;
+  left: 16px;
+  background: rgba(0, 0, 0, 0.7);
+  color: white;
+  padding: 10px;
+  border-radius: 8px;
+  border: 2px solid #ffb142;
+  font-size: 14px;
+  max-width: 250px;
+  max-height: 120px;
+  overflow-y: auto;
+}
+
+.clash-log-entry {
+  margin-bottom: 5px;
+  padding-bottom: 5px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.2);
+}
+
+.clash-log-entry:last-child {
+  margin-bottom: 0;
+  padding-bottom: 0;
+  border-bottom: none;
+}
+
+/* Environment controls */
+.clash-environment-controls {
+  display: flex;
+  gap: 10px;
+  position: absolute;
+  top: 16px;
+  right: 16px;
+  z-index: 100;
+}
+
+.clash-env-btn {
+  width: 44px;
+  height: 44px;
+  border-radius: 50%;
+  background: rgba(0, 0, 0, 0.6);
+  border: 2px solid #ffb142;
+  color: white;
+  font-size: 20px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.clash-env-btn:hover {
+  transform: scale(1.1);
+  background: rgba(0, 0, 0, 0.8);
+}
+
+/* Goal celebration */
+.clash-goal-celebration {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  align-items: center;
+  pointer-events: none;
+  z-index: 1000;
+  animation: clash-celebration-bg 3s forwards;
+}
+
+@keyframes clash-celebration-bg {
+  0%, 100% { background-color: rgba(0, 0, 0, 0); }
+  50% { background-color: rgba(0, 0, 0, 0.5); }
+}
+
+.clash-goal-text {
+  font-size: 72px;
+  font-weight: bold;
+  color: #ffb142;
+  text-shadow: 0 0 10px #ff9800, 0 0 20px #ff9800, 0 0 30px #ff9800;
+  animation: clash-goal-pulse 3s forwards;
+  transform: scale(0);
+  opacity: 0;
+}
+
+@keyframes clash-goal-pulse {
+  0% { transform: scale(0); opacity: 0; }
+  30% { transform: scale(1.2); opacity: 1; }
+  50% { transform: scale(1); opacity: 1; }
+  80% { transform: scale(1.1); opacity: 1; }
+  100% { transform: scale(0); opacity: 0; }
+}
+
+.clash-goal-team {
+  font-size: 32px;
+  color: white;
+  margin-top: 20px;
+  text-shadow: 0 0 10px rgba(0, 0, 0, 0.8);
+  animation: clash-team-fade 3s forwards;
+  opacity: 0;
+}
+
+@keyframes clash-team-fade {
+  0%, 100% { opacity: 0; }
+  30%, 80% { opacity: 1; }
+}
+
+/* Responsive adjustments */
+@media (max-width: 768px) {
+  .clash-score-display {
+    width: 90%;
+    margin-top: -20px;
+  }
+  
+  .clash-score-panel {
+    padding: 8px 12px;
+  }
+  
+  .clash-team-logo {
+    width: 30px;
+    height: 30px;
+  }
+  
+  .clash-score {
+    font-size: 22px;
+  }
+  
+  .clash-controls {
+    flex-wrap: wrap;
+  }
+  
+  .clash-btn {
+    font-size: 12px;
+    padding: 8px 12px;
+  }
+  
+  .clash-goal-text {
+    font-size: 48px;
+  }
+  
+  .clash-goal-team {
+    font-size: 24px;
+  }
+}
+
+/* Special effects */
+.clash-shine-effect {
+  position: absolute;
+  top: 0;
+  left: -100%;
+  width: 50%;
+  height: 100%;
+  background: linear-gradient(
+    to right,
+    rgba(255, 255, 255, 0) 0%,
+    rgba(255, 255, 255, 0.3) 50%,
+    rgba(255, 255, 255, 0) 100%
+  );
+  transform: skewX(-25deg);
+  animation: clash-shine 3s infinite;
+}
+
+@keyframes clash-shine {
+  0% { left: -100%; }
+  100% { left: 200%; }
+}
+
+/* Loading screen */
+.clash-loading-screen {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: #000;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  align-items: center;
+  z-index: 9999;
+}
+
+.clash-loading-logo {
+  width: 150px;
+  height: 150px;
+  margin-bottom: 30px;
+  animation: clash-pulse 2s infinite;
+}
+
+.clash-loading-bar-container {
+  width: 300px;
+  height: 30px;
+  background: #333;
+  border-radius: 15px;
+  overflow: hidden;
+  border: 3px solid #ffb142;
+  padding: 4px;
+}
+
+.clash-loading-bar {
+  height: 100%;
+  width: 0%;
+  background: linear-gradient(to right, #f39c12, #ffb142);
+  border-radius: 10px;
+  animation: clash-loading 3s forwards;
+}
+
+@keyframes clash-loading {
+  0% { width: 0%; }
+  100% { width: 100%; }
+}
+
+.clash-loading-text {
+  margin-top: 20px;
+  color: #ffb142;
+  font-size: 20px;
+  font-weight: bold;
+}
+
+/* Card level indicator */
+.clash-card-level {
+  position: absolute;
+  top: -10px;
+  right: -10px;
+  width: 25px;
+  height: 25px;
+  border-radius: 50%;
+  background: linear-gradient(to bottom, #3498db 0%, #2980b9 100%);
+  border: 2px solid #fff;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: white;
+  font-size: 12px;
+  font-weight: bold;
+  box-shadow: 0 2px 5px rgba(0,0,0,0.3);
+}
+
+/* Power-up glow effect */
+.clash-power-up {
+  box-shadow: 0 0 15px 5px rgba(255, 177, 66, 0.8);
+  animation: clash-power-pulse 2s infinite;
+}
+
+@keyframes clash-power-pulse {
+  0%, 100% { box-shadow: 0 0 15px 5px rgba(255, 177, 66, 0.8); }
+  50% { box-shadow: 0 0 25px 10px rgba(255, 177, 66, 0.8); }
+}
+
+/* Upgrade panel */
+.clash-upgrade-panel {
+  background: linear-gradient(to bottom, #2c3e50 0%, #1a2530 100%);
+  border: 3px solid #ffb142;
+  border-radius: 10px;
+  padding: 15px;
+  box-shadow: 0 5px 15px rgba(0,0,0,0.3);
+  color: white;
+  width: 80%;
+  max-width: 400px;
+  margin: 0 auto 20px;
+}
+
+.clash-upgrade-header {
+  text-align: center;
+  font-size: 18px;
+  margin-bottom: 15px;
+  color: #ffb142;
+}
+
+.clash-upgrade-options {
+  display: flex;
+  justify-content: space-around;
+}
+
+.clash-upgrade-option {
+  text-align: center;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.clash-upgrade-option:hover {
+  transform: scale(1.1);
+}
+
+.clash-upgrade-icon {
+  width: 50px;
+  height: 50px;
+  background: #34495e;
+  border-radius: 10px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin: 0 auto 10px;
+  border: 2px solid #ffb142;
+}
+
+.clash-upgrade-name {
+  font-size: 14px;
+}
+
+.clash-upgrade-cost {
+  font-size: 12px;
+  color: #f39c12;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
+}
+
+.clash-upgrade-cost img {
+  width: 15px;
+  height: 15px;
+}

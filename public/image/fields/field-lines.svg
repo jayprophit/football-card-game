@@ -1,0 +1,78 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1300" height="900" viewBox="0 0 1300 900">
+  <!-- Background (transparent) -->
+  <rect width="1300" height="900" fill="none" />
+  
+  <!-- Field grid lines (13x9) -->
+  <g stroke="rgba(255, 255, 255, 0.4)" stroke-width="2">
+    <!-- Vertical grid lines -->
+    <line x1="0" y1="0" x2="0" y2="900" />
+    <line x1="100" y1="0" x2="100" y2="900" />
+    <line x1="200" y1="0" x2="200" y2="900" />
+    <line x1="300" y1="0" x2="300" y2="900" />
+    <line x1="400" y1="0" x2="400" y2="900" />
+    <line x1="500" y1="0" x2="500" y2="900" />
+    <line x1="600" y1="0" x2="600" y2="900" />
+    <line x1="700" y1="0" x2="700" y2="900" />
+    <line x1="800" y1="0" x2="800" y2="900" />
+    <line x1="900" y1="0" x2="900" y2="900" />
+    <line x1="1000" y1="0" x2="1000" y2="900" />
+    <line x1="1100" y1="0" x2="1100" y2="900" />
+    <line x1="1200" y1="0" x2="1200" y2="900" />
+    <line x1="1300" y1="0" x2="1300" y2="900" />
+    
+    <!-- Horizontal grid lines -->
+    <line x1="0" y1="0" x2="1300" y2="0" />
+    <line x1="0" y1="100" x2="1300" y2="100" />
+    <line x1="0" y1="200" x2="1300" y2="200" />
+    <line x1="0" y1="300" x2="1300" y2="300" />
+    <line x1="0" y1="400" x2="1300" y2="400" />
+    <line x1="0" y1="500" x2="1300" y2="500" />
+    <line x1="0" y1="600" x2="1300" y2="600" />
+    <line x1="0" y1="700" x2="1300" y2="700" />
+    <line x1="0" y1="800" x2="1300" y2="800" />
+    <line x1="0" y1="900" x2="1300" y2="900" />
+  </g>
+  
+  <!-- Football field markings -->
+  <g stroke="rgba(255, 255, 255, 0.9)" stroke-width="4" fill="none">
+    <!-- Outer boundary -->
+    <rect x="50" y="50" width="1200" height="800" />
+    
+    <!-- Center line -->
+    <line x1="650" y1="50" x2="650" y2="850" />
+    
+    <!-- Center circle -->
+    <circle cx="650" cy="450" r="100" />
+    <circle cx="650" cy="450" r="5" fill="rgba(255, 255, 255, 0.9)" />
+    
+    <!-- Penalty areas -->
+    <!-- Home team (bottom) -->
+    <rect x="450" y="650" width="400" height="150" />
+    <!-- Away team (top) -->
+    <rect x="450" y="50" width="400" height="150" />
+    
+    <!-- Goal areas -->
+    <!-- Home team (bottom) -->
+    <rect x="500" y="750" width="300" height="50" />
+    <!-- Away team (top) -->
+    <rect x="500" y="50" width="300" height="50" />
+    
+    <!-- Penalty spots -->
+    <circle cx="650" cy="700" r="5" fill="rgba(255, 255, 255, 0.9)" />
+    <circle cx="650" cy="150" r="5" fill="rgba(255, 255, 255, 0.9)" />
+    
+    <!-- Penalty arcs -->
+    <path d="M 550 700 A 100 100 0 0 1 750 700" />
+    <path d="M 550 150 A 100 100 0 0 0 750 150" />
+    
+    <!-- Corner arcs -->
+    <path d="M 50 50 A 20 20 0 0 1 70 70" />
+    <path d="M 1250 50 A 20 20 0 0 0 1230 70" />
+    <path d="M 50 850 A 20 20 0 0 0 70 830" />
+    <path d="M 1250 850 A 20 20 0 0 1 1230 830" />
+  </g>
+  
+  <!-- Goal areas highlight -->
+  <rect x="500" y="800" width="300" height="100" fill="rgba(92, 107, 192, 0.2)" />
+  <rect x="500" y="0" width="300" height="100" fill="rgba(92, 107, 192, 0.2)" />
+</svg>

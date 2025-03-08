@@ -1,0 +1,306 @@
+{
+  "packs": [
+    {
+      "id": "pack001",
+      "name": "Bronze Pack",
+      "description": "Contains 3 players with at least 1 rare.",
+      "price": {
+        "amount": 500,
+        "currency": "coins"
+      },
+      "image": "bronze_pack.png",
+      "contents": {
+        "players": 3,
+        "guaranteedRarities": [
+          {"rarity": "rare", "count": 1}
+        ],
+        "maxRarity": "rare",
+        "minRating": 70,
+        "maxRating": 82
+      }
+    },
+    {
+      "id": "pack002",
+      "name": "Silver Pack",
+      "description": "Contains 6 players with at least 3 rares.",
+      "price": {
+        "amount": 1000,
+        "currency": "coins"
+      },
+      "image": "silver_pack.png",
+      "contents": {
+        "players": 6,
+        "guaranteedRarities": [
+          {"rarity": "rare", "count": 3}
+        ],
+        "maxRarity": "epic",
+        "minRating": 75,
+        "maxRating": 85
+      }
+    },
+    {
+      "id": "pack003",
+      "name": "Gold Pack",
+      "description": "Contains 12 players with at least 6 rares and 1 guaranteed 82+ player.",
+      "price": {
+        "amount": 2000,
+        "currency": "coins"
+      },
+      "image": "gold_pack.png",
+      "contents": {
+        "players": 12,
+        "guaranteedRarities": [
+          {"rarity": "rare", "count": 6}
+        ],
+        "guaranteedRatings": [
+          {"rating": 82, "count": 1}
+        ],
+        "maxRarity": "epic",
+        "minRating": 75,
+        "maxRating": 87
+      }
+    },
+    {
+      "id": "pack004",
+      "name": "Premium Pack",
+      "description": "Contains 12 players, all rare with at least 1 epic.",
+      "price": {
+        "amount": 50,
+        "currency": "gems"
+      },
+      "image": "premium_pack.png",
+      "contents": {
+        "players": 12,
+        "guaranteedRarities": [
+          {"rarity": "rare", "count": 12},
+          {"rarity": "epic", "count": 1}
+        ],
+        "maxRarity": "legendary",
+        "minRating": 80,
+        "maxRating": 90
+      }
+    },
+    {
+      "id": "pack005",
+      "name": "Mega Pack",
+      "description": "Contains 30 players, 18 rares, 3 guaranteed 85+ players and a chance for legendary cards.",
+      "price": {
+        "amount": 150,
+        "currency": "gems"
+      },
+      "image": "mega_pack.png",
+      "contents": {
+        "players": 30,
+        "guaranteedRarities": [
+          {"rarity": "rare", "count": 18},
+          {"rarity": "epic", "count": 3}
+        ],
+        "guaranteedRatings": [
+          {"rating": 85, "count": 3}
+        ],
+        "maxRarity": "legendary",
+        "minRating": 80,
+        "maxRating": 93,
+        "legendaryChance": 0.1
+      }
+    },
+    {
+      "id": "pack006",
+      "name": "Position Pack - Forwards",
+      "description": "Contains 5 attacking players (ST, CF, LW, RW) with at least 2 epics.",
+      "price": {
+        "amount": 40,
+        "currency": "gems"
+      },
+      "image": "forwards_pack.png",
+      "contents": {
+        "players": 5,
+        "positions": ["ST", "CF", "LW", "RW"],
+        "guaranteedRarities": [
+          {"rarity": "rare", "count": 5},
+          {"rarity": "epic", "count": 2}
+        ],
+        "maxRarity": "legendary",
+        "minRating": 80,
+        "maxRating": 93
+      }
+    },
+    {
+      "id": "pack007",
+      "name": "Position Pack - Midfielders",
+      "description": "Contains 5 midfield players (CM, CDM, CAM, LM, RM) with at least 2 epics.",
+      "price": {
+        "amount": 40,
+        "currency": "gems"
+      },
+      "image": "midfielders_pack.png",
+      "contents": {
+        "players": 5,
+        "positions": ["CM", "CDM", "CAM", "LM", "RM"],
+        "guaranteedRarities": [
+          {"rarity": "rare", "count": 5},
+          {"rarity": "epic", "count": 2}
+        ],
+        "maxRarity": "legendary",
+        "minRating": 80,
+        "maxRating": 93
+      }
+    },
+    {
+      "id": "pack008",
+      "name": "Position Pack - Defenders",
+      "description": "Contains 5 defensive players (CB, LB, RB) with at least 2 epics.",
+      "price": {
+        "amount": 40,
+        "currency": "gems"
+      },
+      "image": "defenders_pack.png",
+      "contents": {
+        "players": 5,
+        "positions": ["CB", "LB", "RB"],
+        "guaranteedRarities": [
+          {"rarity": "rare", "count": 5},
+          {"rarity": "epic", "count": 2}
+        ],
+        "maxRarity": "legendary",
+        "minRating": 80,
+        "maxRating": 93
+      }
+    },
+    {
+      "id": "pack009",
+      "name": "Team Pack - Premier League",
+      "description": "Contains 8 players from Premier League teams with at least 3 epics.",
+      "price": {
+        "amount": 60,
+        "currency": "gems"
+      },
+      "image": "premier_pack.png",
+      "contents": {
+        "players": 8,
+        "teams": ["Liverpool FC", "Manchester City", "Arsenal", "Manchester United", "Tottenham Hotspur", "Chelsea"],
+        "guaranteedRarities": [
+          {"rarity": "rare", "count": 8},
+          {"rarity": "epic", "count": 3}
+        ],
+        "maxRarity": "legendary",
+        "minRating": 80,
+        "maxRating": 93
+      }
+    },
+    {
+      "id": "pack010",
+      "name": "Team Pack - La Liga",
+      "description": "Contains 8 players from La Liga teams with at least 3 epics.",
+      "price": {
+        "amount": 60,
+        "currency": "gems"
+      },
+      "image": "laliga_pack.png",
+      "contents": {
+        "players": 8,
+        "teams": ["Real Madrid", "Barcelona", "Atletico Madrid"],
+        "guaranteedRarities": [
+          {"rarity": "rare", "count": 8},
+          {"rarity": "epic", "count": 3}
+        ],
+        "maxRarity": "legendary",
+        "minRating": 80,
+        "maxRating": 93
+      }
+    }
+  ],
+  "currencies": {
+    "coins": {
+      "name": "Coins",
+      "description": "In-game currency earned from matches and achievements",
+      "purchasable": false,
+      "icon": "coin_icon.png"
+    },
+    "gems": {
+      "name": "Gems",
+      "description": "Premium currency for special items and packs",
+      "purchasable": true,
+      "icon": "gem_icon.png",
+      "purchaseOptions": [
+        {"amount": 100, "price": 0.99, "currency": "USD"},
+        {"amount": 500, "price": 4.99, "currency": "USD"},
+        {"amount": 1000, "price": 9.99, "currency": "USD", "bonus": 50},
+        {"amount": 2500, "price": 24.99, "currency": "USD", "bonus": 250},
+        {"amount": 5000, "price": 49.99, "currency": "USD", "bonus": 750}
+      ]
+    }
+  },
+  "subscriptions": {
+    "bronze": {
+      "name": "Bronze Pass",
+      "price": 2.99,
+      "currency": "USD",
+      "period": "month",
+      "benefits": [
+        "Ad-Free Experience",
+        "Daily Bonus: 50 Coins",
+        "Bonus XP: +10%"
+      ]
+    },
+    "silver": {
+      "name": "Silver Pass",
+      "price": 5.99,
+      "currency": "USD",
+      "period": "month",
+      "benefits": [
+        "Ad-Free Experience",
+        "Daily Bonus: 150 Coins",
+        "Bonus XP: +25%",
+        "Premium Tournaments"
+      ]
+    },
+    "gold": {
+      "name": "Gold Pass",
+      "price": 9.99,
+      "currency": "USD",
+      "period": "month",
+      "benefits": [
+        "Ad-Free Experience",
+        "Daily Bonus: 300 Coins",
+        "Bonus XP: +50%",
+        "Premium Tournaments",
+        "Exclusive Cards"
+      ]
+    }
+  },
+  "rarities": [
+    {
+      "id": "common",
+      "name": "Common",
+      "color": "#BDBDBD",
+      "probability": 0.6,
+      "minRating": 65,
+      "maxRating": 80
+    },
+    {
+      "id": "rare",
+      "name": "Rare",
+      "color": "#2196F3",
+      "probability": 0.3,
+      "minRating": 75,
+      "maxRating": 85
+    },
+    {
+      "id": "epic",
+      "name": "Epic",
+      "color": "#9C27B0",
+      "probability": 0.08,
+      "minRating": 82,
+      "maxRating": 90
+    },
+    {
+      "id": "legendary",
+      "name": "Legendary",
+      "color": "#FFC107",
+      "probability": 0.02,
+      "minRating": 87,
+      "maxRating": 95
+    }
+  ]
+}

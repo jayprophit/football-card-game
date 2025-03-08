@@ -1,0 +1,4088 @@
+  async _updateTournamentStatus() {
+    try {
+      // Find tournaments that need status updates
+      
+      // 1. Tournaments that should start
+      const startingResult = await this.db.query(
+        `SELECT * FROM tournaments 
+         WHERE status = 'upcoming' AND start_date <= NOW()`
+      );
+      
+      // 2. Tournaments that should end
+      const endingResult = await this.db.query(
+        `SELECT * FROM tournaments 
+         WHERE status = 'active' AND end_date <= NOW()`
+      );
+      
+      console.log(`Found ${startingResult.rows.length} tournaments to start and ${endingResult.rows.length} tournaments to end`);
+      
+      // Process starting tournaments
+      for (const tournament of startingResult.rows) {
+        await this.db.query(
+          `UPDATE tournaments SET
+           status = 'active'
+           WHERE tournament_id = $1`,
+          [tournament.tournament_id]
+        );
+        
+        // Get participants
+        const participantsResult = await this.db.query(
+          'SELECT * FROM tournament_participants WHERE tournament_id = $1',
+          [tournament.tournament_id]
+        );
+        
+        // Create notifications
+        for (const participant of participantsResult.rows) {
+          await this.db.query(
+            `INSERT INTO notifications (
+              notification_id, user_id, type, title, message, action_data, created_at
+            ) VALUES ($1, $2, $3, $4, $5, $6, NOW())`,
+            [
+              uuid.v4(),
+              participant.user_id,
+              'tournament_started',
+              `Tournament Started: ${tournament.name}`,
+              `The tournament "${tournament.name}" has started! Check the schedule for your upcoming matches.`,
+              JSON.stringify({
+                tournamentId: tournament.tournament_id,
+                tournamentName: tournament.name
+              })
+            ]
+          );
+        }
+        
+        console.log(`Started tournament ${tournament.name} (${tournament.tournament_id})`);
+      }
+      
+      // Process ending tournaments
+      for (const tournament of endingResult.rows) {
+        // Determine tournament winner
+        const winnerResult = await this.db.query(
+          `SELECT user_id, COUNT(*) as wins
+           FROM tournament_matches
+           WHERE tournament_id = $1 AND winner_id IS NOT NULL
+           GROUP BY user_id
+           ORDER BY wins DESC
+           LIMIT 1`,
+          [tournament.tournament_id]
+        );
+        
+        const winnerId = winnerResult.rows.length > 0 ? winnerResult.rows[0].user_id : null;
+        
+        // Update tournament
+        await this.db.query(
+          `UPDATE tournaments SET
+           status = 'completed',
+           winner_id = $1
+           WHERE tournament_id = $2`,
+          [winnerId, tournament.tournament_id]
+        );
+        
+        // Distribute prizes if there's a winner
+        if (winnerId) {
+          // Get prizes
+          const prizesResult = await this.db.query(
+            'SELECT * FROM tournament_prizes WHERE tournament_id = $1 ORDER BY position',
+            [tournament.tournament_id]
+          );
+          
+          // Award prize to winner
+          if (prizesResult.rows.length > 0) {
+            const firstPrize = prizesResult.rows[0];
+            
+            if (firstPrize.reward_type === 'tokens') {
+              // Award tokens
+              // In a real implementation, this would call the blockchain service
+              
+              // Get winner user details
+              const userResult = await this.db.query(
+                'SELECT * FROM users WHERE user_id = $1',
+                [winnerId]
+              );
+              
+              const winner = userResult.rows[0];
+              
+              // Handle underage winners (lock rewards)
+              if (winner.is_underage) {
+                await this._lockUnderageReward(
+                  winnerId,
+                  parseFloat(firstPrize.reward_amount),
+                  `Tournament prize: ${tournament.name}`
+                );
+              } else {
+                // Award tokens directly
+                // In a real implementation, this would call the blockchain service
+                
+                // Record reward
+                await this.db.query(
+                  `INSERT INTO player_rewards (
+                    reward_id, user_id, reward_type, amount, reason, tournament_id, created_at
+                  ) VALUES ($1, $2, $3, $4, $5, $6, NOW())`,
+                  [
+                    uuid.v4(),
+                    winnerId,
+                    'tokens',
+                    firstPrize.reward_amount,
+                    `Tournament prize: ${tournament.name}`,
+                    tournament.tournament_id
+                  ]
+                );
+              }
+            } else if (firstPrize.reward_type === 'card_pack') {
+              // Award card pack
+              await this._awardCardPack(winnerId, firstPrize.card_pack_id);
+            }
+          }
+          
+          // Create notification for winner
+          await this.db.query(
+            `INSERT INTO notifications (
+              notification_id, user_id, type, title, message, action_data, created_at
+            ) VALUES ($1, $2, $3, $4, $5, $6, NOW())`,
+            [
+              uuid.v4(),
+              winnerId,
+              'tournament_won',
+              `Tournament Victory: ${tournament.name}`,
+              `Congratulations! You've won the "${tournament.name}" tournament!`,
+              JSON.stringify({
+                tournamentId: tournament.tournament_id,
+                tournamentName: tournament.name,
+                prizes: prizesResult.rows.map(p => ({
+                  type: p.reward_type,
+                  amount: p.reward_amount,
+                  description: p.description
+                }))
+              })
+            ]
+          );
+        }
+        
+        // Notify all participants
+        const participantsResult = await this.db.query(
+          'SELECT * FROM tournament_participants WHERE tournament_id = $1',
+          [tournament.tournament_id]
+        );
+        
+        for (const participant of participantsResult.rows) {
+          if (participant.user_id !== winnerId) {
+            await this.db.query(
+              `INSERT INTO notifications (
+                notification_id, user_id, type, title, message, action_data, created_at
+              ) VALUES ($1, $2, $3, $4, $5, $6, NOW())`,
+              [
+                uuid.v4(),
+                participant.user_id,
+                'tournament_ended',
+                `Tournament Ended: ${tournament.name}`,
+                `The tournament "${tournament.name}" has ended.`,
+                JSON.stringify({
+                  tournamentId: tournament.tournament_id,
+                  tournamentName: tournament.name,
+                  winnerId
+                })
+              ]
+            );
+          }
+        }
+        
+        console.log(`Ended tournament ${tournament.name} (${tournament.tournament_id})`);
+      }
+    } catch (error) {
+      console.error('Update tournament status error:', error);
+      throw error;
+    }
+  }
+  
+  async _lockUnderageReward(userId, amount, reason) {
+    try {
+      // Check if user has existing locked rewards
+      const rewardsResult = await this.db.query(
+        'SELECT * FROM locked_rewards WHERE user_id = $1',
+        [userId]
+      );
+      
+      // Get user's date of birth for calculating unlock date
+      const userResult = await this.db.query(
+        'SELECT date_of_birth FROM users WHERE user_id = $1',
+        [userId]
+      );
+      
+      if (userResult.rows.length === 0) {
+        throw new Error(`User ${userId} not found`);
+      }
+      
+      const dateOfBirth = userResult.rows[0].date_of_birth;
+      
+      // Calculate unlock date (18th birthday)
+      const unlockDate = new Date(dateOfBirth);
+      unlockDate.setFullYear(unlockDate.getFullYear() + 18);
+      
+      if (rewardsResult.rows.length === 0) {
+        // Create new locked reward
+        await this.db.query(
+          `INSERT INTO locked_rewards (
+            reward_id, user_id, locked_amount, projected_value,
+            staking_yield, compounding_frequency, unlock_date,
+            created_at, updated_at
+          ) VALUES ($1, $2, $3, $4, $5, $6, $7, NOW(), NOW())`,
+          [
+            uuid.v4(),
+            userId,
+            amount,
+            amount, // Initial projected value equals locked amount
+            0.08, // 8% annual yield
+            'daily', // Daily compounding
+            unlockDate
+          ]
+        );
+      } else {
+        // Update existing locked reward
+        const existingReward = rewardsResult.rows[0];
+        const newLockedAmount = parseFloat(existingReward.locked_amount) + amount;
+        
+        await this.db.query(
+          `UPDATE locked_rewards SET
+           locked_amount = $1,
+           projected_value = $2,
+           updated_at = NOW()
+           WHERE reward_id = $3`,
+          [
+            newLockedAmount,
+            newLockedAmount, // Projected value will be updated by compounding task
+            existingReward.reward_id
+          ]
+        );
+      }
+      
+      // Record transaction
+      await this.db.query(
+        `INSERT INTO reward_transactions (
+          transaction_id, user_id, type, amount, reason, status, created_at
+        ) VALUES ($1, $2, $3, $4, $5, $6, NOW())`,
+        [
+          uuid.v4(),
+          userId,
+          'lock',
+          amount,
+          reason,
+          'completed'
+        ]
+      );
+      
+      // Create notification
+      await this.db.query(
+        `INSERT INTO notifications (
+          notification_id, user_id, type, title, message, action_data, created_at
+        ) VALUES ($1, $2, $3, $4, $5, $6, NOW())`,
+        [
+          uuid.v4(),
+          userId,
+          'rewards_locked',
+          'Rewards Locked Until Age 18',
+          `You've earned ${amount} tokens! Since you're under 18, these tokens have been automatically staked and will be unlocked when you turn 18.`,
+          JSON.stringify({
+            amount,
+            reason,
+            unlockDate
+          })
+        ]
+      );
+      
+      console.log(`Locked ${amount} tokens for underage user ${userId}`);
+    } catch (error) {
+      console.error(`Error locking rewards for user ${userId}:`, error);
+      throw error;
+    }
+  }
+  
+  async _processPendingRewards() {
+    try {
+      // In a real implementation, this would sync pending rewards with blockchain
+      // For this example, we'll just log that the task was run
+      console.log('Processing pending rewards (no implementation)');
+    } catch (error) {
+      console.error('Process pending rewards error:', error);
+      throw error;
+    }
+  }
+  
+  async _processPendingNFTs() {
+    try {
+      // In a real implementation, this would sync pending NFTs with blockchain
+      // For this example, we'll just log that the task was run
+      console.log('Processing pending NFTs (no implementation)');
+    } catch (error) {
+      console.error('Process pending NFTs error:', error);
+      throw error;
+    }
+  }
+  
+  async _awardCardPack(userId, packId) {
+    try {
+      // Create pack purchase record
+      await this.db.query(
+        `INSERT INTO user_pack_purchases (
+          purchase_id, user_id, pack_id, payment_id, purchase_date
+        ) VALUES ($1, $2, $3, NULL, NOW())`,
+        [uuid.v4(), userId, packId]
+      );
+      
+      // Get pack details
+      const packResult = await this.db.query(
+        'SELECT * FROM card_packs WHERE pack_id = $1',
+        [packId]
+      );
+      
+      if (packResult.rows.length === 0) {
+        console.error(`Card pack ${packId} not found`);
+        return;
+      }
+      
+      const pack = packResult.rows[0];
+      
+      // Create notification
+      await this.db.query(
+        `INSERT INTO notifications (
+          notification_id, user_id, type, title, message, action_data, created_at
+        ) VALUES ($1, $2, $3, $4, $5, $6, NOW())`,
+        [
+          uuid.v4(),
+          userId,
+          'card_pack',
+          `New Card Pack: ${pack.name}`,
+          `You've received a ${pack.name} card pack containing ${pack.cards_count} cards!`,
+          JSON.stringify({
+            packId: pack.pack_id,
+            packName: pack.name,
+            cardCount: pack.cards_count
+          })
+        ]
+      );
+      
+      console.log(`Awarded ${pack.name} card pack to user ${userId}`);
+    } catch (error) {
+      console.error(`Error awarding card pack to user ${userId}:`, error);
+      throw error;
+    }
+  }
+}
+
+/**
+ * Task Scheduler
+ * Manages scheduling of automated tasks
+ */
+class TaskScheduler {
+  constructor() {
+    this.dailyTasks = new Map(); // Map of task name to { time, callback }
+    this.hourlyTasks = new Map(); // Map of task name to { minute, callback }
+    this.intervalTasks = new Map(); // Map of task name to { seconds, callback, lastRun }
+  }
+  
+  /**
+   * Schedule a daily task
+   * @param {string} name Task name
+   * @param {string} time Time in HH:MM format
+   * @param {Function} callback Function to call
+   */
+  scheduleDaily(name, time, callback) {
+    const [hour, minute] = time.split(':').map(part => parseInt(part));
+    
+    this.dailyTasks.set(name, {
+      hour,
+      minute,
+      callback,
+      lastRun: null
+    });
+  }
+  
+  /**
+   * Schedule an hourly task
+   * @param {string} name Task name
+   * @param {number} minute Minute of the hour to run (0-59)
+   * @param {Function} callback Function to call
+   */
+  scheduleHourly(name, minute, callback) {
+    this.hourlyTasks.set(name, {
+      minute,
+      callback,
+      lastRun: null
+    });
+  }
+  
+  /**
+   * Schedule a task at regular intervals
+   * @param {string} name Task name
+   * @param {number} seconds Interval in seconds
+   * @param {Function} callback Function to call
+   */
+  scheduleInterval(name, seconds, callback) {
+    this.intervalTasks.set(name, {
+      seconds,
+      callback,
+      lastRun: null
+    });
+  }
+  
+  /**
+   * Check for tasks that are due to run
+   * @returns {Array} Array of task callbacks to execute
+   */
+  checkDueTasks() {
+    const now = new Date();
+    const dueTasks = [];
+    
+    // Check daily tasks
+    for (const [name, task] of this.dailyTasks.entries()) {
+      if (now.getHours() === task.hour && now.getMinutes() === task.minute) {
+        // Check if already run today
+        if (!task.lastRun || !this._isSameDay(task.lastRun, now)) {
+          dueTasks.push(task);
+          task.lastRun = new Date();
+        }
+      }
+    }
+    
+    // Check hourly tasks
+    for (const [name, task] of this.hourlyTasks.entries()) {
+      if (now.getMinutes() === task.minute) {
+        // Check if already run this hour
+        if (!task.lastRun || !this._isSameHour(task.lastRun, now)) {
+          dueTasks.push(task);
+          task.lastRun = new Date();
+        }
+      }
+    }
+    
+    // Check interval tasks
+    for (const [name, task] of this.intervalTasks.entries()) {
+      if (!task.lastRun || (now - task.lastRun) / 1000 >= task.seconds) {
+        dueTasks.push(task);
+        task.lastRun = new Date();
+      }
+    }
+    
+    return dueTasks;
+  }
+  
+  /**
+   * Check if two dates are on the same day
+   * @param {Date} date1 First date
+   * @param {Date} date2 Second date
+   * @returns {boolean} True if dates are on the same day
+   */
+  _isSameDay(date1, date2) {
+    return date1.getFullYear() === date2.getFullYear() &&
+           date1.getMonth() === date2.getMonth() &&
+           date1.getDate() === date2.getDate();
+  }
+  
+  /**
+   * Check if two dates are in the same hour
+   * @param {Date} date1 First date
+   * @param {Date} date2 Second date
+   * @returns {boolean} True if dates are in the same hour
+   */
+  _isSameHour(date1, date2) {
+    return this._isSameDay(date1, date2) && date1.getHours() === date2.getHours();
+  }
+}
+
+/**
+ * PostgreSQL Connection
+ * Wrapper for PostgreSQL database connection
+ */
+class PostgresConnection {
+  constructor(connectionString) {
+    this.pg = require('pg');
+    this.pool = new this.pg.Pool({
+      connectionString
+    });
+  }
+  
+  /**
+   * Execute a query
+   * @param {string} text Query text
+   * @param {Array} params Query parameters
+   * @returns {Promise<Object>} Query result
+   */
+  async query(text, params) {
+    return this.pool.query(text, params);
+  }
+}
+
+/**
+ * Redis Client
+ * Wrapper for Redis client
+ */
+class RedisClient {
+  constructor(url) {
+    this.redis = require('redis');
+    this.client = this.redis.createClient({
+      url
+    });
+    
+    this.client.on('error', (err) => {
+      console.error('Redis error:', err);
+    });
+    
+    this.connect();
+  }
+  
+  /**
+   * Connect to Redis
+   */
+  async connect() {
+    if (!this.client.isOpen) {
+      await this.client.connect();
+    }
+  }
+  
+  /**
+   * Set a value
+   * @param {string} key Key
+   * @param {string} value Value
+   * @param {string} [flag] Optional flag (EX, PX, etc.)
+   * @param {number} [expiry] Optional expiry
+   * @returns {Promise<string>} Result
+   */
+  async set(key, value, flag, expiry) {
+    await this.connect();
+    
+    if (flag && expiry) {
+      return this.client.set(key, value, flag, expiry);
+    }
+    
+    return this.client.set(key, value);
+  }
+  
+  /**
+   * Get a value
+   * @param {string} key Key
+   * @returns {Promise<string>} Value
+   */
+  async get(key) {
+    await this.connect();
+    return this.client.get(key);
+  }
+  
+  /**
+   * Delete a key
+   * @param {string} key Key
+   * @returns {Promise<number>} Number of keys deleted
+   */
+  async del(key) {
+    await this.connect();
+    return this.client.del(key);
+  }
+}
+
+/**
+ * Matchmaking System
+ * Handles matchmaking for online play
+ */
+class MatchmakingSystem {
+  constructor(redis) {
+    this.redis = redis;
+    this.queuePrefix = 'matchmaking:queue:';
+    this.queueExpiry = 60 * 60; // 1 hour
+  }
+  
+  /**
+   * Add user to matchmaking queue
+   * @param {string} userId User ID
+   * @param {string} teamId Team ID
+   * @param {number} rating Team rating
+   * @param {number} ratingRange Rating range
+   * @returns {Promise<string>} Queue ID
+   */
+  async addToQueue(userId, teamId, rating, ratingRange) {
+    const queueId = `${this.queuePrefix}${userId}`;
+    
+    await this.redis.set(
+      queueId,
+      JSON.stringify({
+        userId,
+        teamId,
+        rating,
+        ratingRange,
+        timestamp: Date.now()
+      }),
+      'EX',
+      this.queueExpiry
+    );
+    
+    return queueId;
+  }
+  
+  /**
+   * Remove user from matchmaking queue
+   * @param {string} userId User ID
+   * @returns {Promise<void>}
+   */
+  async removeFromQueue(userId) {
+    const queueId = `${this.queuePrefix}${userId}`;
+    await this.redis.del(queueId);
+  }
+  
+  /**
+   * Find a match for user
+   * @param {string} userId User ID
+   * @param {string} teamId Team ID
+   * @param {number} rating Team rating
+   * @param {number} ratingRange Rating range
+   * @returns {Promise<Object|null>} Match information or null if no match found
+   */
+  async findMatch(userId, teamId, rating, ratingRange) {
+    // Get all queue entries
+    const keys = await this.redis.keys(`${this.queuePrefix}*`);
+    
+    // Filter out user's own entry
+    const otherKeys = keys.filter(key => !key.endsWith(userId));
+    
+    if (otherKeys.length === 0) {
+      return null;
+    }
+    
+    // Find a suitable match
+    for (const key of otherKeys) {
+      const value = await this.redis.get(key);
+      
+      if (!value) continue;
+      
+      const queueEntry = JSON.parse(value);
+      
+      // Check if rating is within range
+      const ratingDiff = Math.abs(rating - queueEntry.rating);
+      
+      if (ratingDiff <= ratingRange && ratingDiff <= queueEntry.ratingRange) {
+        // Found a match
+        
+        // Remove both users from queue
+        await this.removeFromQueue(userId);
+        await this.removeFromQueue(queueEntry.userId);
+        
+        return {
+          userId: queueEntry.userId,
+          teamId: queueEntry.teamId,
+          rating: queueEntry.rating
+        };
+      }
+    }
+    
+    return null;
+  }
+}
+
+// Export classes
+module.exports = {
+  ApiGatewayService,
+  ServiceRegistry,
+  AuthService,
+  UserService,
+  MatchService,
+  AutomationService,
+  TaskScheduler,
+  PostgresConnection,
+  RedisClient,
+  MatchmakingSystem
+};
+  _scheduleCoreTasks() {
+    // Daily tasks
+    this.taskScheduler.scheduleDaily('update-age-verifications', '00:01', () => {
+      return this._executeTask('update-age-verifications', this._updateAgeVerifications.bind(this));
+    });
+    
+    this.taskScheduler.scheduleDaily('check-nft-eligibility', '00:15', () => {
+      return this._executeTask('check-nft-eligibility', this._checkNftEligibility.bind(this));
+    });
+    
+    this.taskScheduler.scheduleDaily('compound-underage-rewards', '00:30', () => {
+      return this._executeTask('compound-underage-rewards', this._compoundUnderageRewards.bind(this));
+    });
+    
+    this.taskScheduler.scheduleDaily('generate-daily-challenges', '01:00', () => {
+      return this._executeTask('generate-daily-challenges', this._generateDailyChallenges.bind(this));
+    });
+    
+    this.taskScheduler.scheduleDaily('expire-marketplace-listings', '02:00', () => {
+      return this._executeTask('expire-marketplace-listings', this._expireMarketplaceListings.bind(this));
+    });
+    
+    // Hourly tasks
+    this.taskScheduler.scheduleHourly('process-kyc-requests', 5, () => {
+      return this._executeTask('process-kyc-requests', this._processKYCRequests.bind(this));
+    });
+    
+    this.taskScheduler.scheduleHourly('clean-inactive-matches', 10, () => {
+      return this._executeTask('clean-inactive-matches', this._cleanInactiveMatches.bind(this));
+    });
+    
+    this.taskScheduler.scheduleHourly('update-tournament-status', 15, () => {
+      return this._executeTask('update-tournament-status', this._updateTournamentStatus.bind(this));
+    });
+    
+    // Every 5 minutes
+    this.taskScheduler.scheduleInterval('process-pending-rewards', 5 * 60, () => {
+      return this._executeTask('process-pending-rewards', this._processPendingRewards.bind(this));
+    });
+    
+    this.taskScheduler.scheduleInterval('process-pending-nfts', 10 * 60, () => {
+      return this._executeTask('process-pending-nfts', this._processPendingNFTs.bind(this));
+    });
+  }
+  
+  _startTaskProcessor() {
+    // Check for tasks every minute
+    setInterval(() => {
+      this.taskScheduler.checkDueTasks().forEach(task => {
+        task.callback();
+      });
+    }, 60 * 1000);
+  }
+  
+  async _executeTask(taskName, taskFunction) {
+    // Check if task is already running
+    if (this.runningTasks.get(taskName)) {
+      console.log(`Task ${taskName} already running, skipping`);
+      return;
+    }
+    
+    // Mark task as running
+    this.runningTasks.set(taskName, true);
+    
+    try {
+      console.log(`Starting task: ${taskName}`);
+      const startTime = Date.now();
+      
+      // Execute task
+      await taskFunction();
+      
+      const duration = Date.now() - startTime;
+      console.log(`Task ${taskName} completed in ${duration}ms`);
+      
+      // Record successful task execution
+      await this._recordTaskExecution(taskName, true, duration);
+    } catch (error) {
+      console.error(`Task ${taskName} failed:`, error);
+      
+      // Record failed task execution
+      await this._recordTaskExecution(taskName, false, 0, error.message);
+    } finally {
+      // Mark task as not running
+      this.runningTasks.set(taskName, false);
+    }
+  }
+  
+  async _recordTaskExecution(taskName, success, duration, errorMessage = null) {
+    try {
+      await this.db.query(
+        `INSERT INTO system_tasks (
+          task_id, task_name, success, duration_ms, error_message, executed_at
+        ) VALUES ($1, $2, $3, $4, $5, NOW())`,
+        [uuid.v4(), taskName, success, duration, errorMessage]
+      );
+    } catch (dbError) {
+      console.error('Failed to record task execution:', dbError);
+    }
+  }
+  
+  async _updateAgeVerifications() {
+    try {
+      // Find underage users who have turned 18
+      const result = await this.db.query(
+        `SELECT 
+          u.user_id, u.username, u.email, av.date_of_birth, av.unlock_date
+         FROM 
+          users u
+         JOIN 
+          age_verification av ON u.user_id = av.user_id
+         WHERE 
+          u.is_underage = TRUE AND
+          EXTRACT(YEAR FROM AGE(CURRENT_DATE, av.date_of_birth)) >= 18`
+      );
+      
+      if (result.rows.length === 0) {
+        console.log('No users have turned 18 today');
+        return;
+      }
+      
+      console.log(`Found ${result.rows.length} users who have turned 18`);
+      
+      // Process each user
+      for (const user of result.rows) {
+        // Update age verification status
+        await this.db.query(
+          `UPDATE age_verification SET
+           age = EXTRACT(YEAR FROM AGE(CURRENT_DATE, date_of_birth))::INTEGER,
+           is_underage = FALSE,
+           updated_at = NOW()
+           WHERE user_id = $1`,
+          [user.user_id]
+        );
+        
+        // Update user record
+        await this.db.query(
+          `UPDATE users SET
+           age = EXTRACT(YEAR FROM AGE(CURRENT_DATE, date_of_birth))::INTEGER,
+           is_underage = FALSE
+           WHERE user_id = $1`,
+          [user.user_id]
+        );
+        
+        // Process any locked rewards
+        await this._unlockUserRewards(user.user_id);
+        
+        // Create notification
+        await this.db.query(
+          `INSERT INTO notifications (
+            notification_id, user_id, type, title, message, action_data, created_at
+          ) VALUES ($1, $2, $3, $4, $5, $6, NOW())`,
+          [
+            uuid.v4(),
+            user.user_id,
+            'age_verification',
+            'Age Restriction Lifted',
+            'Congratulations! You are now eligible for all features in FootballChess, including blockchain trading and NFT minting.',
+            JSON.stringify({
+              unlockedRewards: true,
+              unlockedNFTs: true
+            })
+          ]
+        );
+        
+        console.log(`Updated age verification for user ${user.username} (${user.user_id})`);
+      }
+    } catch (error) {
+      console.error('Update age verifications error:', error);
+      throw error;
+    }
+  }
+  
+  async _unlockUserRewards(userId) {
+    try {
+      // Get locked rewards
+      const rewardsResult = await this.db.query(
+        'SELECT * FROM locked_rewards WHERE user_id = $1',
+        [userId]
+      );
+      
+      if (rewardsResult.rows.length === 0) {
+        console.log(`No locked rewards found for user ${userId}`);
+        return;
+      }
+      
+      const lockedReward = rewardsResult.rows[0];
+      
+      // Calculate final value with compounding interest
+      const finalValue = parseFloat(lockedReward.projected_value);
+      
+      // Record transaction
+      await this.db.query(
+        `INSERT INTO reward_transactions (
+          transaction_id, user_id, reward_id, type, amount, reason, status, created_at
+        ) VALUES ($1, $2, $3, $4, $5, $6, $7, NOW())`,
+        [
+          uuid.v4(),
+          userId,
+          lockedReward.reward_id,
+          'unlock',
+          finalValue,
+          'Age restriction lifted',
+          'completed'
+        ]
+      );
+      
+      // Add to user's token balance (in blockchain)
+      // In a real implementation, this would call the blockchain service to unlock tokens
+      
+      // Create notification
+      await this.db.query(
+        `INSERT INTO notifications (
+          notification_id, user_id, type, title, message, action_data, created_at
+        ) VALUES ($1, $2, $3, $4, $5, $6, NOW())`,
+        [
+          uuid.v4(),
+          userId,
+          'rewards_unlocked',
+          'Rewards Unlocked',
+          `Your locked rewards have been unlocked and are now available for use. Final amount: ${finalValue.toFixed(2)} tokens.`,
+          JSON.stringify({
+            amount: finalValue,
+            originalAmount: parseFloat(lockedReward.locked_amount),
+            growth: finalValue - parseFloat(lockedReward.locked_amount)
+          })
+        ]
+      );
+      
+      // Mark reward as unlocked
+      await this.db.query(
+        'DELETE FROM locked_rewards WHERE reward_id = $1',
+        [lockedReward.reward_id]
+      );
+      
+      console.log(`Unlocked rewards for user ${userId}: ${finalValue.toFixed(2)} tokens`);
+    } catch (error) {
+      console.error(`Error unlocking rewards for user ${userId}:`, error);
+      throw error;
+    }
+  }
+  
+  async _checkNftEligibility() {
+    try {
+      // Find NFTs that are pending age but user is now 18+
+      const result = await this.db.query(
+        `SELECT 
+          uc.user_card_id, uc.user_id, uc.card_id, u.username
+         FROM 
+          user_cards uc
+         JOIN 
+          users u ON uc.user_id = u.user_id
+         WHERE 
+          uc.nft_status = 'pending_age' AND
+          u.is_underage = FALSE`
+      );
+      
+      if (result.rows.length === 0) {
+        console.log('No pending NFTs found for users who have turned 18');
+        return;
+      }
+      
+      console.log(`Found ${result.rows.length} pending NFTs for users who have turned 18`);
+      
+      // Group by user
+      const userNFTs = {};
+      for (const card of result.rows) {
+        if (!userNFTs[card.user_id]) {
+          userNFTs[card.user_id] = [];
+        }
+        
+        userNFTs[card.user_id].push(card);
+      }
+      
+      // Process each user's NFTs
+      for (const [userId, cards] of Object.entries(userNFTs)) {
+        // Check if user has KYC
+        const kycResult = await this.db.query(
+          `SELECT * FROM kyc_requests 
+           WHERE user_id = $1 AND status = 'approved'
+           ORDER BY submitted_at DESC LIMIT 1`,
+          [userId]
+        );
+        
+        const hasKYC = kycResult.rows.length > 0;
+        const newStatus = hasKYC ? 'pending_mint' : 'pending_kyc';
+        
+        // Update card status
+        await this.db.query(
+          `UPDATE user_cards SET
+           nft_status = $1
+           WHERE user_id = $2 AND nft_status = 'pending_age'`,
+          [newStatus, userId]
+        );
+        
+        // Create notification
+        await this.db.query(
+          `INSERT INTO notifications (
+            notification_id, user_id, type, title, message, action_data, created_at
+          ) VALUES ($1, $2, $3, $4, $5, $6, NOW())`,
+          [
+            uuid.v4(),
+            userId,
+            'nft_eligibility',
+            hasKYC ? 'NFTs Ready for Minting' : 'KYC Required for NFTs',
+            hasKYC ?
+              `Your ${cards.length} pending player cards are now eligible for minting as NFTs! Connect your wallet to mint them.` :
+              `Your ${cards.length} pending player cards require KYC verification before they can be minted as NFTs.`,
+            JSON.stringify({
+              cardCount: cards.length,
+              requiresKYC: !hasKYC,
+              requiresWallet: hasKYC
+            })
+          ]
+        );
+        
+        console.log(`Updated NFT status for user ${cards[0].username} (${userId}): ${cards.length} cards set to ${newStatus}`);
+      }
+    } catch (error) {
+      console.error('Check NFT eligibility error:', error);
+      throw error;
+    }
+  }
+  
+  async _compoundUnderageRewards() {
+    try {
+      // Get all locked rewards
+      const result = await this.db.query(
+        'SELECT * FROM locked_rewards'
+      );
+      
+      if (result.rows.length === 0) {
+        console.log('No locked rewards found to compound');
+        return;
+      }
+      
+      console.log(`Found ${result.rows.length} locked rewards to compound`);
+      
+      // Process each locked reward
+      for (const reward of result.rows) {
+        // Calculate time until unlock in years
+        const now = new Date();
+        const unlockDate = new Date(reward.unlock_date);
+        const yearsUntilUnlock = (unlockDate - now) / (365.25 * 24 * 60 * 60 * 1000);
+        
+        if (yearsUntilUnlock <= 0) {
+          // User has reached unlock date but record hasn't been processed yet
+          // This will be handled by the age verification task
+          continue;
+        }
+        
+        // Calculate compound interest
+        const principal = parseFloat(reward.locked_amount);
+        const rate = parseFloat(reward.staking_yield);
+        
+        // Convert compounding frequency to number of times per year
+        let compoundsPerYear;
+        switch (reward.compounding_frequency) {
+          case 'daily':
+            compoundsPerYear = 365;
+            break;
+          case 'weekly':
+            compoundsPerYear = 52;
+            break;
+          case 'monthly':
+            compoundsPerYear = 12;
+            break;
+          case 'quarterly':
+            compoundsPerYear = 4;
+            break;
+          default:
+            compoundsPerYear = 1; // Annual
+        }
+        
+        // Compound interest formula: A = P(1 + r/n)^(nt)
+        const projectedValue = principal * Math.pow(
+          (1 + rate / compoundsPerYear),
+          compoundsPerYear * yearsUntilUnlock
+        );
+        
+        // Update projected value
+        await this.db.query(
+          `UPDATE locked_rewards SET
+           projected_value = $1,
+           updated_at = NOW()
+           WHERE reward_id = $2`,
+          [projectedValue, reward.reward_id]
+        );
+        
+        console.log(`Compounded rewards for user ${reward.user_id}: ${principal.toFixed(2)} → ${projectedValue.toFixed(2)}`);
+      }
+    } catch (error) {
+      console.error('Compound underage rewards error:', error);
+      throw error;
+    }
+  }
+  
+  async _generateDailyChallenges() {
+    try {
+      // Get active users (logged in within last 7 days)
+      const result = await this.db.query(
+        `SELECT DISTINCT user_id 
+         FROM user_logins 
+         WHERE login_at > NOW() - INTERVAL '7 days'`
+      );
+      
+      if (result.rows.length === 0) {
+        console.log('No active users found for daily challenges');
+        return;
+      }
+      
+      console.log(`Generating daily challenges for ${result.rows.length} active users`);
+      
+      // Get available challenge types
+      const challengeTypesResult = await this.db.query(
+        'SELECT * FROM challenge_types WHERE category = $1',
+        ['daily']
+      );
+      
+      if (challengeTypesResult.rows.length === 0) {
+        console.error('No daily challenge types found');
+        return;
+      }
+      
+      // For each user, generate 3 random challenges
+      for (const user of result.rows) {
+        // Clear any existing expired challenges
+        await this.db.query(
+          `DELETE FROM user_challenges 
+           WHERE user_id = $1 AND end_time < NOW()`,
+          [user.user_id]
+        );
+        
+        // Check how many active challenges the user has
+        const activeResult = await this.db.query(
+          `SELECT COUNT(*) FROM user_challenges 
+           WHERE user_id = $1 AND end_time > NOW()`,
+          [user.user_id]
+        );
+        
+        const activeCount = parseInt(activeResult.rows[0].count);
+        const neededCount = 3 - activeCount;
+        
+        if (neededCount <= 0) {
+          continue; // User already has 3 or more active challenges
+        }
+        
+        // Select random challenge types
+        const selectedTypes = [];
+        const availableTypes = [...challengeTypesResult.rows];
+        
+        for (let i = 0; i < neededCount && availableTypes.length > 0; i++) {
+          const index = Math.floor(Math.random() * availableTypes.length);
+          selectedTypes.push(availableTypes[index]);
+          availableTypes.splice(index, 1);
+        }
+        
+        // Create challenges for user
+        for (const challenge of selectedTypes) {
+          // Set end time (24 hours from now)
+          const endTime = new Date();
+          endTime.setHours(endTime.getHours() + challenge.duration_hours || 24);
+          
+          await this.db.query(
+            `INSERT INTO user_challenges (
+              challenge_id, user_id, challenge_type_id, start_time,
+              end_time, created_at, updated_at
+            ) VALUES ($1, $2, $3, NOW(), $4, NOW(), NOW())`,
+            [uuid.v4(), user.user_id, challenge.challenge_type_id, endTime]
+          );
+        }
+        
+        // Create notification
+        if (selectedTypes.length > 0) {
+          await this.db.query(
+            `INSERT INTO notifications (
+              notification_id, user_id, type, title, message, action_data, created_at
+            ) VALUES ($1, $2, $3, $4, $5, $6, NOW())`,
+            [
+              uuid.v4(),
+              user.user_id,
+              'daily_challenges',
+              'New Daily Challenges',
+              `You have ${selectedTypes.length} new daily challenges! Complete them to earn rewards.`,
+              JSON.stringify({
+                challengeCount: selectedTypes.length,
+                challenges: selectedTypes.map(c => ({
+                  id: c.challenge_type_id,
+                  name: c.name,
+                  description: c.description,
+                  target: c.target_value,
+                  reward: {
+                    type: c.reward_type,
+                    amount: c.reward_amount
+                  }
+                }))
+              })
+            ]
+          );
+        }
+      }
+    } catch (error) {
+      console.error('Generate daily challenges error:', error);
+      throw error;
+    }
+  }
+  
+  async _expireMarketplaceListings() {
+    try {
+      // Find expired listings
+      const result = await this.db.query(
+        `SELECT ml.*, u.username 
+         FROM marketplace_listings ml
+         JOIN users u ON ml.seller_id = u.user_id
+         WHERE ml.status = 'active' AND ml.expires_at < NOW()`
+      );
+      
+      if (result.rows.length === 0) {
+        console.log('No expired marketplace listings found');
+        return;
+      }
+      
+      console.log(`Found ${result.rows.length} expired marketplace listings`);
+      
+      // Process each expired listing
+      for (const listing of result.rows) {
+        // Update listing status
+        await this.db.query(
+          `UPDATE marketplace_listings SET
+           status = 'expired',
+           updated_at = NOW()
+           WHERE listing_id = $1`,
+          [listing.listing_id]
+        );
+        
+        // Create notification for seller
+        await this.db.query(
+          `INSERT INTO notifications (
+            notification_id, user_id, type, title, message, action_data, created_at
+          ) VALUES ($1, $2, $3, $4, $5, $6, NOW())`,
+          [
+            uuid.v4(),
+            listing.seller_id,
+            'listing_expired',
+            'Marketplace Listing Expired',
+            `Your listing for ${listing.item_type} has expired without being sold.`,
+            JSON.stringify({
+              listingId: listing.listing_id,
+              itemType: listing.item_type,
+              itemId: listing.item_id,
+              price: listing.price
+            })
+          ]
+        );
+        
+        console.log(`Expired listing ${listing.listing_id} for user ${listing.username} (${listing.seller_id})`);
+      }
+    } catch (error) {
+      console.error('Expire marketplace listings error:', error);
+      throw error;
+    }
+  }
+  
+  async _processKYCRequests() {
+    try {
+      // Find pending KYC requests
+      const result = await this.db.query(
+        `SELECT kr.*, u.username, u.email 
+         FROM kyc_requests kr
+         JOIN users u ON kr.user_id = u.user_id
+         WHERE kr.status = 'pending'
+         ORDER BY kr.submitted_at`
+      );
+      
+      if (result.rows.length === 0) {
+        console.log('No pending KYC requests found');
+        return;
+      }
+      
+      console.log(`Found ${result.rows.length} pending KYC requests`);
+      
+      // Process each KYC request
+      for (const request of result.rows) {
+        // In a real implementation, this would call an external KYC service
+        // For this example, we'll simulate KYC verification with 90% approval rate
+        const isApproved = Math.random() < 0.9;
+        const newStatus = isApproved ? 'approved' : 'rejected';
+        const rejectionReason = isApproved ? null : 'Documents could not be verified';
+        
+        // Update KYC request
+        await this.db.query(
+          `UPDATE kyc_requests SET
+           status = $1,
+           processed_at = NOW(),
+           rejection_reason = $2
+           WHERE request_id = $3`,
+          [newStatus, rejectionReason, request.request_id]
+        );
+        
+        // Create notification
+        await this.db.query(
+          `INSERT INTO notifications (
+            notification_id, user_id, type, title, message, action_data, created_at
+          ) VALUES ($1, $2, $3, $4, $5, $6, NOW())`,
+          [
+            uuid.v4(),
+            request.user_id,
+            'kyc_result',
+            isApproved ? 'KYC Verification Approved' : 'KYC Verification Rejected',
+            isApproved ?
+              'Your KYC verification has been approved. You can now access all blockchain features.' :
+              `Your KYC verification has been rejected. Reason: ${rejectionReason}`,
+            JSON.stringify({
+              status: newStatus,
+              requestId: request.request_id,
+              rejectionReason
+            })
+          ]
+        );
+        
+        // If approved, update any pending NFTs
+        if (isApproved) {
+          await this.db.query(
+            `UPDATE user_cards SET
+             nft_status = 'pending_mint'
+             WHERE user_id = $1 AND nft_status = 'pending_kyc'`,
+            [request.user_id]
+          );
+          
+          // Get count of updated cards
+          const cardResult = await this.db.query(
+            'SELECT COUNT(*) FROM user_cards WHERE user_id = $1 AND nft_status = $1',
+            [request.user_id, 'pending_mint']
+          );
+          
+          const cardCount = parseInt(cardResult.rows[0].count);
+          
+          if (cardCount > 0) {
+            // Create notification for NFTs ready to mint
+            await this.db.query(
+              `INSERT INTO notifications (
+                notification_id, user_id, type, title, message, action_data, created_at
+              ) VALUES ($1, $2, $3, $4, $5, $6, NOW())`,
+              [
+                uuid.v4(),
+                request.user_id,
+                'nft_ready',
+                'NFTs Ready for Minting',
+                `You have ${cardCount} player cards ready to be minted as NFTs. Connect your wallet to mint them.`,
+                JSON.stringify({
+                  cardCount
+                })
+              ]
+            );
+          }
+        }
+        
+        console.log(`Processed KYC request for user ${request.username} (${request.user_id}): ${newStatus}`);
+      }
+    } catch (error) {
+      console.error('Process KYC requests error:', error);
+      throw error;
+    }
+  }
+  
+  async _cleanInactiveMatches() {
+    try {
+      // Find inactive matches (created but not started for 24+ hours, or in progress but inactive for 48+ hours)
+      const result = await this.db.query(
+        `SELECT m.*, t1.name as home_team_name, t2.name as away_team_name 
+         FROM matches m
+         LEFT JOIN teams t1 ON m.home_team_id = t1.team_id
+         LEFT JOIN teams t2 ON m.away_team_id = t2.team_id
+         WHERE (
+           (m.status = 'created' AND m.created_at < NOW() - INTERVAL '24 hours') OR
+           (m.status = 'in_progress' AND m.updated_at < NOW() - INTERVAL '48 hours')
+         )`
+      );
+      
+      if (result.rows.length === 0) {
+        console.log('No inactive matches found');
+        return;
+      }
+      
+      console.log(`Found ${result.rows.length} inactive matches`);
+      
+      // Process each inactive match
+      for (const match of result.rows) {
+        // Update match status
+        await this.db.query(
+          `UPDATE matches SET
+           status = 'abandoned',
+           ended_at = NOW()
+           WHERE match_id = $1`,
+          [match.match_id]
+        );
+        
+        // Parse match data
+        const matchData = typeof match.match_data === 'string' ? 
+          JSON.parse(match.match_data) : match.match_data;
+        
+        // Create notifications for participants
+        if (matchData.homeUserId) {
+          await this.db.query(
+            `INSERT INTO notifications (
+              notification_id, user_id, type, title, message, action_data, created_at
+            ) VALUES ($1, $2, $3, $4, $5, $6, NOW())`,
+            [
+              uuid.v4(),
+              matchData.homeUserId,
+              'match_abandoned',
+              'Match Abandoned Due to Inactivity',
+              `Your match with ${match.away_team_name} has been abandoned due to inactivity.`,
+              JSON.stringify({
+                matchId: match.match_id,
+                opponentTeam: match.away_team_name
+              })
+            ]
+          );
+        }
+        
+        if (matchData.awayUserId) {
+          await this.db.query(
+            `INSERT INTO notifications (
+              notification_id, user_id, type, title, message, action_data, created_at
+            ) VALUES ($1, $2, $3, $4, $5, $6, NOW())`,
+            [
+              uuid.v4(),
+              matchData.awayUserId,
+              'match_abandoned',
+              'Match Abandoned Due to Inactivity',
+              `Your match with ${match.home_team_name} has been abandoned due to inactivity.`,
+              JSON.stringify({
+                matchId: match.match_id,
+                opponentTeam: match.home_team_name
+              })
+            ]
+          );
+        }
+        
+        console.log(`Marked match ${match.match_id} as abandoned`);
+      }
+    } catch (error) {
+      console.error('Clean inactive matches error:', error);
+      throw error;
+    }
+  }
+  
+  async _updateTournamentStatus() {
+    try {
+      // Find tournaments that need status updates
+      
+      // 1. Tournaments that should start
+      const startingResult = await this.db.query(
+        `SELECT * FROM tournaments 
+         WHERE status = 'upcoming' AND start_date <= NOW()`
+      );
+      
+      // 2. Tournaments that should end
+      const endingResult = await this.db.query(
+        `SELECT * FROM tournaments 
+         WHERE status = 'active' AND end_date <= NOW()`
+      );
+      
+      console.log(`Found ${startingResult.rows.length} tournaments to start and ${endingResult.rows.length} tournaments to end`);
+      
+      // Process starting tournaments
+      for (const tournament of startingResult.rows) {
+        await this.db.query(
+          `UPDATE tournaments SET
+           status = 'active'
+           WHERE tournament_id = $1`,
+          [tournament.tournament_id]
+        );
+        
+        // Get participants
+        const participantsResult = await this.db.query(
+          'SELECT * FROM tournament_participants WHERE tournament_id = $1',
+          [tournament.tournament_id]
+        );
+        
+        // Create notifications
+        for (const participant of participantsResult.rows) {
+          await this.db.query(
+            `INSERT INTO notifications (
+              notification_id, user_id, type, title, message, action_data, created_at
+            ) VALUES ($1, $2, $3, $4, $5, $6, NOW())`,
+            [
+              uuid.v4(),
+              participant.user_id,
+              'tournament_started',
+              `Tournament Started: ${tournament.name}`,
+              `The tournament "${tournament.name}" has started! Check the schedule for your upcoming matches.`,
+              JSON.stringify({
+                tournamentId: tournament.tournament_id,
+                tournamentName: tournament.name
+              })
+            ]
+          );
+        }
+        
+        console.log(`Started tournament ${tournament.name} (${tournament.tournament_id})`);
+      }
+      
+      // Process ending tournaments
+      for (const tournament of endingResult.rows) {
+        // Determine tournament winner
+        const winnerResult = await this.db.query(
+          `SELECT user_id, COUNT(*) as wins
+           FROM tournament_matches
+           WHERE tournament_id = $1 AND winner_id IS NOT NULL
+           GROUP BY user_id
+           ORDER BY wins DESC
+           LIMIT 1`,
+          [tournament.tournament_id]
+        );
+        
+        const winnerId = winnerResult.rows.length > 0 ? winnerResult.rows[0].user_id : null;
+        
+        // Update tournament
+        await this.db.query(
+          `UPDATE tournaments SET
+           status = 'completed',
+           winner_id = $1
+           WHERE tournament_id = $2`,
+          [winnerId, tournament.tournament_id]
+        );
+        
+        // Distribute prizes if there's a winner
+        if (winnerId) {
+          // Get prizes
+          const prizesResult = await this.db.query(
+            'SELECT * FROM tournament_prizes WHERE tournament_id = $1 ORDER BY position',
+            [tournament.tournament_id]
+          );
+          
+          // Award prize to winner
+          if (prizesResult.rows.length > 0) {
+            const firstPrize = prizesResult.rows[0];
+            
+            if (firstPrize.reward_type === 'tokens') {
+              // Award tokens
+              // In a real implementation,  async _handleSocketMove(socket, data) {
+    const userId = socket.userId;
+    const { matchId, cardId, fromX, fromY, toX, toY } = data;
+    
+    try {
+      // Get match state
+      let matchState = this.activeMatches.get(matchId);
+      
+      if (!matchState) {
+        socket.emit('error', { message: 'Match not found' });
+        return;
+      }
+      
+      // Check if it's user's turn
+      const isHomeTeam = matchState.homeTeam.userId === userId;
+      const isAwayTeam = matchState.awayTeam.userId === userId;
+      const isTurn = (isHomeTeam && matchState.currentTurn === 'home') ||
+                     (isAwayTeam && matchState.currentTurn === 'away');
+      
+      if (!isTurn) {
+        socket.emit('error', { message: 'Not your turn' });
+        return;
+      }
+      
+      // Check if user has moves remaining
+      if (matchState.movesRemaining <= 0) {
+        socket.emit('error', { message: 'No moves remaining in this turn' });
+        return;
+      }
+      
+      // Check if card belongs to user
+      const team = isHomeTeam ? matchState.homeTeam : matchState.awayTeam;
+      const card = team.cards.find(c => c.userCardId === cardId);
+      
+      if (!card) {
+        socket.emit('error', { message: 'Card not found or not owned by you' });
+        return;
+      }
+      
+      // Check if move is valid
+      const moveIsValid = this.gameEngine.isValidMove(matchState, card, toX, toY);
+      
+      if (!moveIsValid) {
+        socket.emit('error', { message: 'Invalid move' });
+        return;
+      }
+      
+      // Process move
+      const moveResult = this.gameEngine.processMove(matchState, card, toX, toY);
+      
+      // Update match state
+      matchState = moveResult.newState;
+      this.activeMatches.set(matchId, matchState);
+      
+      // Save to Redis
+      await this.redis.set(
+        `match:${matchId}`,
+        JSON.stringify(matchState),
+        'EX',
+        7 * 24 * 60 * 60 // 7 days
+      );
+      
+      // Record move in database
+      await this.db.query(
+        `INSERT INTO match_moves (
+          move_id, match_id, user_id, card_id, from_x, from_y, to_x, to_y,
+          turn_number, move_index, has_ball, created_at
+        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, NOW())`,
+        [
+          uuid.v4(),
+          matchId,
+          userId,
+          cardId,
+          fromX,
+          fromY,
+          toX,
+          toY,
+          matchState.turnCount,
+          3 - matchState.movesRemaining,
+          card.hasBall,
+          
+        ]
+      );
+      
+      // Record any events (goals, fouls, etc.)
+      if (moveResult.events && moveResult.events.length > 0) {
+        for (const event of moveResult.events) {
+          await this.db.query(
+            `INSERT INTO match_events (
+              event_id, match_id, event_type, player_card_id,
+              position_x, position_y, timestamp, event_data
+            ) VALUES ($1, $2, $3, $4, $5, $6, NOW(), $7)`,
+            [
+              uuid.v4(),
+              matchId,
+              event.type,
+              event.playerId || null,
+              event.x || null,
+              event.y || null,
+              JSON.stringify(event.data || {})
+            ]
+          );
+        }
+      }
+      
+      // Notify both players
+      this.io.to(`match:${matchId}`).emit('move_made', {
+        playerId: userId,
+        cardId,
+        fromX,
+        fromY,
+        toX,
+        toY,
+        currentState: matchState
+      });
+      
+      // Handle turn transition if needed
+      if (matchState.movesRemaining === 0) {
+        await this._handleTurnTransition(matchId, matchState);
+      }
+      
+      // If opponent is AI and it's their turn, trigger AI move
+      if (matchState.isAI && (
+        (isHomeTeam && matchState.currentTurn === 'away') ||
+        (isAwayTeam && matchState.currentTurn === 'home')
+      )) {
+        this._scheduleAIMove(matchId);
+      }
+    } catch (error) {
+      console.error('Process move error:', error);
+      socket.emit('error', { message: 'Failed to process move' });
+    }
+  }
+  
+  async _handleBallAction(socket, data) {
+    const userId = socket.userId;
+    const { matchId, cardId, action, targetX, targetY, targetCardId } = data;
+    
+    try {
+      // Get match state
+      let matchState = this.activeMatches.get(matchId);
+      
+      if (!matchState) {
+        socket.emit('error', { message: 'Match not found' });
+        return;
+      }
+      
+      // Check if it's user's turn
+      const isHomeTeam = matchState.homeTeam.userId === userId;
+      const isAwayTeam = matchState.awayTeam.userId === userId;
+      const isTurn = (isHomeTeam && matchState.currentTurn === 'home') ||
+                     (isAwayTeam && matchState.currentTurn === 'away');
+      
+      if (!isTurn) {
+        socket.emit('error', { message: 'Not your turn' });
+        return;
+      }
+      
+      // Check if user has moves remaining
+      if (matchState.movesRemaining <= 0) {
+        socket.emit('error', { message: 'No moves remaining in this turn' });
+        return;
+      }
+      
+      // Check if card belongs to user and has the ball
+      const team = isHomeTeam ? matchState.homeTeam : matchState.awayTeam;
+      const card = team.cards.find(c => c.userCardId === cardId);
+      
+      if (!card) {
+        socket.emit('error', { message: 'Card not found or not owned by you' });
+        return;
+      }
+      
+      if (!card.hasBall) {
+        socket.emit('error', { message: 'This card does not have the ball' });
+        return;
+      }
+      
+      // Process ball action
+      let actionResult;
+      
+      if (action === 'pass') {
+        // Find target card
+        const targetCard = team.cards.find(c => c.userCardId === targetCardId);
+        
+        if (!targetCard) {
+          socket.emit('error', { message: 'Target card not found or not on your team' });
+          return;
+        }
+        
+        actionResult = this.gameEngine.processPass(matchState, card, targetCard);
+      } else if (action === 'shoot') {
+        actionResult = this.gameEngine.processShot(matchState, card, targetX, targetY);
+      } else {
+        socket.emit('error', { message: 'Invalid ball action' });
+        return;
+      }
+      
+      // Update match state
+      matchState = actionResult.newState;
+      this.activeMatches.set(matchId, matchState);
+      
+      // Save to Redis
+      await this.redis.set(
+        `match:${matchId}`,
+        JSON.stringify(matchState),
+        'EX',
+        7 * 24 * 60 * 60 // 7 days
+      );
+      
+      // Record action in database
+      await this.db.query(
+        `INSERT INTO match_events (
+          event_id, match_id, event_type, player_card_id,
+          position_x, position_y, target_x, target_y, timestamp, event_data
+        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, NOW(), $9)`,
+        [
+          uuid.v4(),
+          matchId,
+          action,
+          cardId,
+          card.gridX,
+          card.gridY,
+          targetX || null,
+          targetY || null,
+          JSON.stringify({
+            targetCardId: targetCardId || null,
+            success: actionResult.success,
+            ...actionResult.data
+          })
+        ]
+      );
+      
+      // Record any additional events (goals, interceptions, etc.)
+      if (actionResult.events && actionResult.events.length > 0) {
+        for (const event of actionResult.events) {
+          await this.db.query(
+            `INSERT INTO match_events (
+              event_id, match_id, event_type, player_card_id,
+              position_x, position_y, timestamp, event_data
+            ) VALUES ($1, $2, $3, $4, $5, $6, NOW(), $7)`,
+            [
+              uuid.v4(),
+              matchId,
+              event.type,
+              event.playerId || null,
+              event.x || null,
+              event.y || null,
+              JSON.stringify(event.data || {})
+            ]
+          );
+        }
+      }
+      
+      // Update match scores if goal scored
+      if (actionResult.goalScored) {
+        await this.db.query(
+          `UPDATE matches SET
+           home_score = $1,
+           away_score = $2
+           WHERE match_id = $3`,
+          [
+            matchState.homeScore,
+            matchState.awayScore,
+            matchId
+          ]
+        );
+      }
+      
+      // Notify both players
+      this.io.to(`match:${matchId}`).emit('ball_action', {
+        playerId: userId,
+        cardId,
+        action,
+        targetCardId: targetCardId || null,
+        targetX: targetX || null,
+        targetY: targetY || null,
+        success: actionResult.success,
+        goalScored: actionResult.goalScored || false,
+        currentState: matchState
+      });
+      
+      // Decrease moves remaining
+      matchState.movesRemaining--;
+      
+      // Handle turn transition if needed
+      if (matchState.movesRemaining === 0) {
+        await this._handleTurnTransition(matchId, matchState);
+      }
+      
+      // If opponent is AI and it's their turn, trigger AI move
+      if (matchState.isAI && (
+        (isHomeTeam && matchState.currentTurn === 'away') ||
+        (isAwayTeam && matchState.currentTurn === 'home')
+      )) {
+        this._scheduleAIMove(matchId);
+      }
+    } catch (error) {
+      console.error('Process ball action error:', error);
+      socket.emit('error', { message: 'Failed to process ball action' });
+    }
+  }
+  
+  async _handleTurnTransition(matchId, matchState) {
+    // Switch turns
+    matchState.currentTurn = matchState.currentTurn === 'home' ? 'away' : 'home';
+    matchState.movesRemaining = 3;
+    matchState.turnCount++;
+    
+    // Update game time (each turn is 5 minutes of game time)
+    matchState.gameTime += 5;
+    
+    // Check if match is over (90 minutes = 18 turns for each team)
+    const matchOver = matchState.gameTime >= 90;
+    
+    // Update match state
+    this.activeMatches.set(matchId, matchState);
+    
+    // Save to Redis
+    await this.redis.set(
+      `match:${matchId}`,
+      JSON.stringify(matchState),
+      'EX',
+      7 * 24 * 60 * 60 // 7 days
+    );
+    
+    // Update match in database
+    await this.db.query(
+      `UPDATE matches SET
+       status = $1,
+       current_turn = $2,
+       turn_count = $3,
+       ended_at = $4,
+       match_data = $5
+       WHERE match_id = $6`,
+      [
+        matchOver ? 'completed' : 'in_progress',
+        matchState.currentTurn,
+        matchState.turnCount,
+        matchOver ? new Date() : null,
+        JSON.stringify({
+          currentTurn: matchState.currentTurn,
+          movesRemaining: matchState.movesRemaining,
+          turnCount: matchState.turnCount,
+          gameTime: matchState.gameTime
+        }),
+        matchId
+      ]
+    );
+    
+    // Notify both players
+    this.io.to(`match:${matchId}`).emit('turn_change', {
+      newTurn: matchState.currentTurn,
+      turnCount: matchState.turnCount,
+      gameTime: matchState.gameTime,
+      matchOver
+    });
+    
+    // If match is over, handle end of match
+    if (matchOver) {
+      await this._handleMatchEnd(matchId, matchState);
+    }
+  }
+  
+  async _handleMatchEnd(matchId, matchState) {
+    // Determine winner
+    let winnerId = null;
+    if (matchState.homeScore > matchState.awayScore) {
+      winnerId = matchState.homeTeam.userId;
+    } else if (matchState.awayScore > matchState.homeScore) {
+      winnerId = matchState.awayTeam.userId;
+    }
+    
+    // Update match in database
+    await this.db.query(
+      `UPDATE matches SET
+       status = 'completed',
+       home_score = $1,
+       away_score = $2,
+       ended_at = NOW()
+       WHERE match_id = $3`,
+      [
+        matchState.homeScore,
+        matchState.awayScore,
+        matchId
+      ]
+    );
+    
+    // Update player progression
+    await this._updatePlayerProgression(
+      matchState.homeTeam.userId,
+      winnerId === matchState.homeTeam.userId,
+      winnerId === null,
+      matchState.homeScore,
+      matchState.awayScore
+    );
+    
+    await this._updatePlayerProgression(
+      matchState.awayTeam.userId,
+      winnerId === matchState.awayTeam.userId,
+      winnerId === null,
+      matchState.awayScore,
+      matchState.homeScore
+    );
+    
+    // Notify both players
+    this.io.to(`match:${matchId}`).emit('match_end', {
+      homeScore: matchState.homeScore,
+      awayScore: matchState.awayScore,
+      winnerId,
+      isDraw: winnerId === null
+    });
+    
+    // Remove from active matches
+    this.activeMatches.delete(matchId);
+    
+    // Delete from Redis (no longer active)
+    await this.redis.del(`match:${matchId}`);
+  }
+  
+  async _updatePlayerProgression(userId, isWin, isDraw, goalsScored, goalsConceded) {
+    try {
+      // Update progression
+      await this.db.query(
+        `UPDATE player_progression SET
+         matches_played = matches_played + 1,
+         matches_won = matches_won + $1,
+         matches_drawn = matches_drawn + $2,
+         matches_lost = matches_lost + $3,
+         goals_scored = goals_scored + $4,
+         goals_conceded = goals_conceded + $5,
+         clean_sheets = clean_sheets + $6,
+         experience = experience + $7,
+         updated_at = NOW()
+         WHERE user_id = $8`,
+        [
+          isWin ? 1 : 0,
+          isDraw ? 1 : 0,
+          (!isWin && !isDraw) ? 1 : 0,
+          goalsScored,
+          goalsConceded,
+          goalsConceded === 0 ? 1 : 0,
+          this._calculateMatchXp(isWin, isDraw, goalsScored, goalsConceded),
+          userId
+        ]
+      );
+      
+      // Check for level up
+      const progressionResult = await this.db.query(
+        'SELECT * FROM player_progression WHERE user_id = $1',
+        [userId]
+      );
+      
+      if (progressionResult.rows.length > 0) {
+        const progression = progressionResult.rows[0];
+        const newLevel = this._calculateLevel(progression.experience);
+        
+        if (newLevel > progression.level) {
+          // Level up
+          await this.db.query(
+            `UPDATE player_progression SET
+             level = $1
+             WHERE user_id = $2`,
+            [newLevel, userId]
+          );
+          
+          // Get level rewards
+          const rewardsResult = await this.db.query(
+            'SELECT * FROM level_rewards WHERE level = $1',
+            [newLevel]
+          );
+          
+          if (rewardsResult.rows.length > 0) {
+            const rewards = rewardsResult.rows[0];
+            
+            // Add coins
+            await this.db.query(
+              `UPDATE player_progression SET
+               coins = coins + $1
+               WHERE user_id = $2`,
+              [rewards.coins, userId]
+            );
+            
+            // Create notification for level up
+            await this.db.query(
+              `INSERT INTO notifications (
+                notification_id, user_id, type, title, message, action_data, created_at
+              ) VALUES ($1, $2, $3, $4, $5, $6, NOW())`,
+              [
+                uuid.v4(),
+                userId,
+                'level_up',
+                `Level Up! You're now level ${newLevel}`,
+                `Congratulations! You've reached level ${newLevel} and earned ${rewards.coins} coins${rewards.card_pack_type ? ' and a ' + rewards.card_pack_type + ' card pack' : ''}!`,
+                JSON.stringify({
+                  level: newLevel,
+                  coins: rewards.coins,
+                  cardPackType: rewards.card_pack_type
+                })
+              ]
+            );
+            
+            // Award card pack if applicable
+            if (rewards.card_pack_type) {
+              await this._awardCardPack(userId, rewards.card_pack_type);
+            }
+          }
+        }
+      }
+    } catch (error) {
+      console.error('Update player progression error:', error);
+    }
+  }
+  
+  _calculateMatchXp(isWin, isDraw, goalsScored, goalsConceded) {
+    // Base XP for playing a match
+    let xp = 20;
+    
+    // XP for win/draw
+    if (isWin) {
+      xp += 30;
+    } else if (isDraw) {
+      xp += 15;
+    }
+    
+    // XP for goals
+    xp += goalsScored * 5;
+    
+    // XP for clean sheet
+    if (goalsConceded === 0) {
+      xp += 10;
+    }
+    
+    return xp;
+  }
+  
+  _calculateLevel(experience) {
+    // Simple level calculation
+    return Math.floor(Math.sqrt(experience / 100)) + 1;
+  }
+  
+  async _awardCardPack(userId, packType) {
+    try {
+      // Get card pack details
+      const packResult = await this.db.query(
+        'SELECT * FROM card_packs WHERE name = $1',
+        [packType]
+      );
+      
+      if (packResult.rows.length === 0) {
+        console.error(`Card pack type "${packType}" not found`);
+        return;
+      }
+      
+      const pack = packResult.rows[0];
+      
+      // Create pack purchase record
+      await this.db.query(
+        `INSERT INTO user_pack_purchases (
+          purchase_id, user_id, pack_id, payment_id, purchase_date
+        ) VALUES ($1, $2, $3, NULL, NOW())`,
+        [uuid.v4(), userId, pack.pack_id]
+      );
+      
+      // Create notification
+      await this.db.query(
+        `INSERT INTO notifications (
+          notification_id, user_id, type, title, message, action_data, created_at
+        ) VALUES ($1, $2, $3, $4, $5, $6, NOW())`,
+        [
+          uuid.v4(),
+          userId,
+          'card_pack',
+          `New Card Pack: ${pack.name}`,
+          `You've received a ${pack.name} card pack containing ${pack.cards_count} cards!`,
+          JSON.stringify({
+            packId: pack.pack_id,
+            packName: pack.name,
+            cardCount: pack.cards_count
+          })
+        ]
+      );
+    } catch (error) {
+      console.error('Award card pack error:', error);
+    }
+  }
+  
+  _scheduleAIMove(matchId) {
+    // Simulate AI thinking time (0.5-2 seconds)
+    const delay = 500 + Math.floor(Math.random() * 1500);
+    
+    setTimeout(() => {
+      this._makeAIMove(matchId).catch(err => {
+        console.error('AI move error:', err);
+      });
+    }, delay);
+  }
+  
+  async _makeAIMove(matchId) {
+    try {
+      // Get match state
+      let matchState = this.activeMatches.get(matchId);
+      
+      if (!matchState) {
+        console.error(`AI move failed: Match ${matchId} not found`);
+        return;
+      }
+      
+      // Check if it's AI's turn
+      const isAITurn = matchState.isAI && (
+        (matchState.homeTeam.isAI && matchState.currentTurn === 'home') ||
+        (matchState.awayTeam.isAI && matchState.currentTurn === 'away')
+      );
+      
+      if (!isAITurn) {
+        console.error(`AI move failed: Not AI's turn in match ${matchId}`);
+        return;
+      }
+      
+      // Get AI team
+      const team = matchState.currentTurn === 'home' ? matchState.homeTeam : matchState.awayTeam;
+      
+      // Calculate AI move
+      const aiMove = this.gameEngine.calculateAIMove(matchState, team);
+      
+      // Process the move
+      if (aiMove.type === 'move') {
+        const card = team.cards.find(c => c.userCardId === aiMove.cardId);
+        
+        if (!card) {
+          console.error(`AI move failed: Card ${aiMove.cardId} not found`);
+          return;
+        }
+        
+        // Process move
+        const moveResult = this.gameEngine.processMove(matchState, card, aiMove.toX, aiMove.toY);
+        
+        // Update match state
+        matchState = moveResult.newState;
+        this.activeMatches.set(matchId, matchState);
+        
+        // Save to Redis
+        await this.redis.set(
+          `match:${matchId}`,
+          JSON.stringify(matchState),
+          'EX',
+          7 * 24 * 60 * 60 // 7 days
+        );
+        
+        // Record move in database
+        await this.db.query(
+          `INSERT INTO match_moves (
+            move_id, match_id, user_id, card_id, from_x, from_y, to_x, to_y,
+            turn_number, move_index, has_ball, created_at
+          ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, NOW())`,
+          [
+            uuid.v4(),
+            matchId,
+            team.userId,
+            aiMove.cardId,
+            card.gridX,
+            card.gridY,
+            aiMove.toX,
+            aiMove.toY,
+            matchState.turnCount,
+            3 - matchState.movesRemaining,
+            card.hasBall,
+          ]
+        );
+        
+        // Record any events
+        if (moveResult.events && moveResult.events.length > 0) {
+          for (const event of moveResult.events) {
+            await this.db.query(
+              `INSERT INTO match_events (
+                event_id, match_id, event_type, player_card_id,
+                position_x, position_y, timestamp, event_data
+              ) VALUES ($1, $2, $3, $4, $5, $6, NOW(), $7)`,
+              [
+                uuid.v4(),
+                matchId,
+                event.type,
+                event.playerId || null,
+                event.x || null,
+                event.y || null,
+                JSON.stringify(event.data || {})
+              ]
+            );
+          }
+        }
+        
+        // Notify players
+        this.io.to(`match:${matchId}`).emit('move_made', {
+          playerId: team.userId,
+          cardId: aiMove.cardId,
+          fromX: card.gridX,
+          fromY: card.gridY,
+          toX: aiMove.toX,
+          toY: aiMove.toY,
+          currentState: matchState
+        });
+      } else if (aiMove.type === 'pass') {
+        const card = team.cards.find(c => c.userCardId === aiMove.cardId);
+        const targetCard = team.cards.find(c => c.userCardId === aiMove.targetCardId);
+        
+        if (!card || !targetCard) {
+          console.error(`AI pass failed: Cards not found`);
+          return;
+        }
+        
+        // Process pass
+        const actionResult = this.gameEngine.processPass(matchState, card, targetCard);
+        
+        // Update match state
+        matchState = actionResult.newState;
+        this.activeMatches.set(matchId, matchState);
+        
+        // Save to Redis
+        await this.redis.set(
+          `match:${matchId}`,
+          JSON.stringify(matchState),
+          'EX',
+          7 * 24 * 60 * 60 // 7 days
+        );
+        
+        // Record action in database
+        await this.db.query(
+          `INSERT INTO match_events (
+            event_id, match_id, event_type, player_card_id,
+            position_x, position_y, timestamp, event_data
+          ) VALUES ($1, $2, $3, $4, $5, $6, NOW(), $7)`,
+          [
+            uuid.v4(),
+            matchId,
+            'pass',
+            aiMove.cardId,
+            card.gridX,
+            card.gridY,
+            JSON.stringify({
+              targetCardId: aiMove.targetCardId,
+              success: actionResult.success,
+              ...actionResult.data
+            })
+          ]
+        );
+        
+        // Notify players
+        this.io.to(`match:${matchId}`).emit('ball_action', {
+          playerId: team.userId,
+          cardId: aiMove.cardId,
+          action: 'pass',
+          targetCardId: aiMove.targetCardId,
+          success: actionResult.success,
+          currentState: matchState
+        });
+      } else if (aiMove.type === 'shoot') {
+        const card = team.cards.find(c => c.userCardId === aiMove.cardId);
+        
+        if (!card) {
+          console.error(`AI shot failed: Card not found`);
+          return;
+        }
+        
+        // Process shot
+        const actionResult = this.gameEngine.processShot(matchState, card, aiMove.targetX, aiMove.targetY);
+        
+        // Update match state
+        matchState = actionResult.newState;
+        this.activeMatches.set(matchId, matchState);
+        
+        // Save to Redis
+        await this.redis.set(
+          `match:${matchId}`,
+          JSON.stringify(matchState),
+          'EX',
+          7 * 24 * 60 * 60 // 7 days
+        );
+        
+        // Record action in database
+        await this.db.query(
+          `INSERT INTO match_events (
+            event_id, match_id, event_type, player_card_id,
+            position_x, position_y, target_x, target_y, timestamp, event_data
+          ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, NOW(), $9)`,
+          [
+            uuid.v4(),
+            matchId,
+            'shoot',
+            aiMove.cardId,
+            card.gridX,
+            card.gridY,
+            aiMove.targetX,
+            aiMove.targetY,
+            JSON.stringify({
+              success: actionResult.success,
+              ...actionResult.data
+            })
+          ]
+        );
+        
+        // Update match scores if goal scored
+        if (actionResult.goalScored) {
+          await this.db.query(
+            `UPDATE matches SET
+             home_score = $1,
+             away_score = $2
+             WHERE match_id = $3`,
+            [
+              matchState.homeScore,
+              matchState.awayScore,
+              matchId
+            ]
+          );
+        }
+        
+        // Notify players
+        this.io.to(`match:${matchId}`).emit('ball_action', {
+          playerId: team.userId,
+          cardId: aiMove.cardId,
+          action: 'shoot',
+          targetX: aiMove.targetX,
+          targetY: aiMove.targetY,
+          success: actionResult.success,
+          goalScored: actionResult.goalScored || false,
+          currentState: matchState
+        });
+      }
+      
+      // Decrease moves remaining
+      matchState.movesRemaining--;
+      
+      // Handle turn transition if needed
+      if (matchState.movesRemaining === 0) {
+        await this._handleTurnTransition(matchId, matchState);
+      } else {
+        // Schedule next AI move
+        this._scheduleAIMove(matchId);
+      }
+    } catch (error) {
+      console.error('AI move error:', error);
+    }
+  }
+}
+
+/**
+ * Automated Tasks Service
+ * Handles scheduled tasks and background processes
+ */
+class AutomationService {
+  constructor() {
+    this.db = new PostgresConnection(process.env.DB_CONNECTION_STRING);
+    this.redis = new RedisClient(process.env.REDIS_URL);
+    this.taskScheduler = new TaskScheduler();
+    this.runningTasks = new Map();
+  }
+  
+  initialize() {
+    // Schedule core tasks
+    this._scheduleCoreTasks();
+    
+    // Start task processor
+    this._startTaskProcessor();
+    
+    console.log('Automation Service initialized');
+  }
+  
+  _scheduleCoreTasks() {
+    // Daily tasks
+    this.taskScheduler.scheduleDaily('update-age-verifications', '00:01', () => {
+      return this._executeTask('update-age-verifications', this._updateAgeVerifications.bind(this));
+    });
+    
+    this.taskScheduler.scheduleDaily('check-nft-eligibility', '00:15', () => {
+      return this._executeTask('check-nft-eligibility', this._checkNftEligibility.bind(this));
+    });
+    
+    this.taskScheduler.scheduleDaily('compound-underage-rewards', '00:30', () => {
+      return this._executeTask('compound-underage-rewards', this._compoundUnderageRewards.bind(this));
+    });
+    
+    this.taskScheduler.scheduleDaily('generate-daily-challenges', '01:00', () => {
+      return this._executeTask('generate-daily-challenges', this._generateDailyChallenges.bind(this));
+    });
+    
+    this.taskScheduler.scheduleDaily('expire-marketplace-listings', '02:00', () => {
+      return this._executeTask('expire-marketplace-listings', this._expireMarketplaceListings.bind(this));  async _handleSubmitKYC(req, res) {
+    const userId = req.user.userId;
+    const { kycData, documents } = req.body;
+    
+    if (!kycData || !documents || documents.length === 0) {
+      return res.status(400).json({ error: 'KYC data and documents are required' });
+    }
+    
+    try {
+      // Check if user is underage
+      const userResult = await this.db.query(
+        'SELECT * FROM users WHERE user_id = $1',
+        [userId]
+      );
+      
+      if (userResult.rows.length === 0) {
+        return res.status(404).json({ error: 'User not found' });
+      }
+      
+      if (userResult.rows[0].is_underage) {
+        return res.status(403).json({ error: 'KYC is only available for users 18 and older' });
+      }
+      
+      // Create KYC request
+      const requestId = uuid.v4();
+      await this.db.query(
+        `INSERT INTO kyc_requests (
+          request_id, user_id, status, submitted_at, documents_count
+        ) VALUES ($1, $2, 'pending', NOW(), $3)`,
+        [requestId, userId, documents.length]
+      );
+      
+      // Store documents
+      for (const document of documents) {
+        // In a real implementation, documents would be validated and securely stored
+        // For this example, we'll just hash the document data
+        const documentHash = createHash('sha256').update(document.data).digest('hex');
+        
+        await this.db.query(
+          `INSERT INTO kyc_documents (
+            document_id, request_id, document_type, document_hash, uploaded_at
+          ) VALUES ($1, $2, $3, $4, NOW())`,
+          [uuid.v4(), requestId, document.type, documentHash]
+        );
+      }
+      
+      // In a real implementation, this would trigger a KYC verification process
+      // For this example, we'll simulate a delayed processing
+      
+      // Return the status
+      return res.status(202).json({
+        requestId,
+        status: 'pending',
+        submittedAt: new Date(),
+        message: 'KYC verification in progress'
+      });
+    } catch (error) {
+      console.error('Submit KYC error:', error);
+      return res.status(500).json({ error: 'Internal server error' });
+    }
+  }
+  
+  async _handleGetKYCStatus(req, res) {
+    const userId = req.user.userId;
+    
+    try {
+      // Get latest KYC request
+      const result = await this.db.query(
+        `SELECT * FROM kyc_requests
+         WHERE user_id = $1
+         ORDER BY submitted_at DESC
+         LIMIT 1`,
+        [userId]
+      );
+      
+      if (result.rows.length === 0) {
+        return res.json({
+          status: 'not_started',
+          message: 'KYC verification not started'
+        });
+      }
+      
+      const kycRequest = result.rows[0];
+      
+      // Get documents
+      const documentsResult = await this.db.query(
+        'SELECT document_id, document_type, uploaded_at FROM kyc_documents WHERE request_id = $1',
+        [kycRequest.request_id]
+      );
+      
+      return res.json({
+        requestId: kycRequest.request_id,
+        status: kycRequest.status,
+        submittedAt: kycRequest.submitted_at,
+        processedAt: kycRequest.processed_at,
+        rejectionReason: kycRequest.rejection_reason,
+        documents: documentsResult.rows
+      });
+    } catch (error) {
+      console.error('Get KYC status error:', error);
+      return res.status(500).json({ error: 'Internal server error' });
+    }
+  }
+  
+  async _handleGetNotifications(req, res) {
+    const userId = req.user.userId;
+    const { limit = 20, offset = 0 } = req.query;
+    
+    try {
+      // Get notifications
+      const result = await this.db.query(
+        `SELECT * FROM notifications
+         WHERE user_id = $1
+         ORDER BY created_at DESC
+         LIMIT $2 OFFSET $3`,
+        [userId, limit, offset]
+      );
+      
+      // Get unread count
+      const countResult = await this.db.query(
+        `SELECT COUNT(*) FROM notifications
+         WHERE user_id = $1 AND is_read = FALSE`,
+        [userId]
+      );
+      
+      return res.json({
+        notifications: result.rows,
+        unreadCount: parseInt(countResult.rows[0].count)
+      });
+    } catch (error) {
+      console.error('Get notifications error:', error);
+      return res.status(500).json({ error: 'Internal server error' });
+    }
+  }
+  
+  async _handleMarkNotificationRead(req, res) {
+    const userId = req.user.userId;
+    const notificationId = req.params.id;
+    
+    try {
+      // Update notification
+      await this.db.query(
+        `UPDATE notifications
+         SET is_read = TRUE
+         WHERE notification_id = $1 AND user_id = $2`,
+        [notificationId, userId]
+      );
+      
+      return res.json({ success: true });
+    } catch (error) {
+      console.error('Mark notification read error:', error);
+      return res.status(500).json({ error: 'Internal server error' });
+    }
+  }
+}
+
+/**
+ * Match Service
+ * Handles game match creation, state management, and results
+ */
+class MatchService {
+  constructor() {
+    this.express = require('express');
+    this.app = this.express();
+    this.http = require('http').createServer(this.app);
+    this.io = require('socket.io')(this.http);
+    this.db = new PostgresConnection(process.env.DB_CONNECTION_STRING);
+    this.redis = new RedisClient(process.env.REDIS_URL);
+    this.authMiddleware = this._createAuthMiddleware();
+    this.matchmaking = new MatchmakingSystem(this.redis);
+    this.gameEngine = new GameEngine();
+    
+    // In-memory active matches
+    this.activeMatches = new Map();
+  }
+  
+  initialize() {
+    // Set up middleware
+    this.app.use(this.express.json());
+    this.app.use(this.authMiddleware);
+    
+    // Set up HTTP routes
+    this._setupRoutes();
+    
+    // Set up WebSocket handlers
+    this._setupSocketHandlers();
+    
+    // Start server
+    const PORT = process.env.PORT || 4004;
+    this.http.listen(PORT, () => {
+      console.log(`Match Service running on port ${PORT}`);
+    });
+  }
+  
+  _createAuthMiddleware() {
+    return (req, res, next) => {
+      const user = req.headers['x-user'];
+      
+      if (!user) {
+        return res.status(401).json({ error: 'User information missing' });
+      }
+      
+      try {
+        req.user = JSON.parse(user);
+        next();
+      } catch (error) {
+        return res.status(401).json({ error: 'Invalid user information' });
+      }
+    };
+  }
+  
+  _setupRoutes() {
+    this.app.post('/create', this._handleCreateMatch.bind(this));
+    this.app.get('/:matchId', this._handleGetMatch.bind(this));
+    this.app.get('/history', this._handleGetMatchHistory.bind(this));
+    this.app.post('/matchmaking/find', this._handleFindMatch.bind(this));
+    this.app.post('/matchmaking/cancel', this._handleCancelMatchmaking.bind(this));
+  }
+  
+  _setupSocketHandlers() {
+    this.io.use((socket, next) => {
+      // Authenticate socket connection
+      const token = socket.handshake.auth.token;
+      const userId = socket.handshake.auth.userId;
+      
+      if (!token || !userId) {
+        return next(new Error('Authentication error'));
+      }
+      
+      // In a real implementation, verify the token
+      // For this example, we'll just store the user ID
+      socket.userId = userId;
+      next();
+    });
+    
+    this.io.on('connection', (socket) => {
+      console.log(`User ${socket.userId} connected`);
+      
+      // Join room for user-specific messages
+      socket.join(`user:${socket.userId}`);
+      
+      // Handle joining a match
+      socket.on('join_match', (matchId) => {
+        this._handleJoinMatch(socket, matchId);
+      });
+      
+      // Handle making a move
+      socket.on('make_move', (data) => {
+        this._handleSocketMove(socket, data);
+      });
+      
+      // Handle ball action
+      socket.on('ball_action', (data) => {
+        this._handleBallAction(socket, data);
+      });
+      
+      // Handle disconnection
+      socket.on('disconnect', () => {
+        console.log(`User ${socket.userId} disconnected`);
+        // Handle any cleanup (e.g., auto-forfeit if in an active match)
+      });
+    });
+  }
+  
+  async _handleCreateMatch(req, res) {
+    const userId = req.user.userId;
+    const { opponentId, teamId, opponentTeamId } = req.body;
+    
+    if (!teamId) {
+      return res.status(400).json({ error: 'Team ID is required' });
+    }
+    
+    try {
+      // Validate team ownership
+      const teamResult = await this.db.query(
+        'SELECT * FROM teams WHERE team_id = $1 AND user_id = $2',
+        [teamId, userId]
+      );
+      
+      if (teamResult.rows.length === 0) {
+        return res.status(404).json({ error: 'Team not found or not owned by user' });
+      }
+      
+      // Create match
+      const matchId = uuid.v4();
+      const isAI = !opponentId; // If no opponent ID is provided, opponent is AI
+      
+      // If opponent is human, validate opponent team ownership
+      if (!isAI) {
+        if (!opponentTeamId) {
+          return res.status(400).json({ error: 'Opponent team ID is required for human opponent' });
+        }
+        
+        const opponentTeamResult = await this.db.query(
+          'SELECT * FROM teams WHERE team_id = $1 AND user_id = $2',
+          [opponentTeamId, opponentId]
+        );
+        
+        if (opponentTeamResult.rows.length === 0) {
+          return res.status(404).json({ error: 'Opponent team not found or not owned by opponent' });
+        }
+      }
+      
+      // Determine who goes first (coin flip)
+      const homeTeamId = Math.random() < 0.5 ? teamId : (opponentTeamId || null);
+      const awayTeamId = homeTeamId === teamId ? (opponentTeamId || null) : teamId;
+      
+      // Insert match
+      const matchResult = await this.db.query(
+        `INSERT INTO matches (
+          match_id, home_team_id, away_team_id, status, created_at,
+          match_data
+        ) VALUES ($1, $2, $3, $4, NOW(), $5) RETURNING *`,
+        [
+          matchId,
+          homeTeamId,
+          awayTeamId,
+          'created',
+          JSON.stringify({
+            isAI,
+            homeUserId: homeTeamId === teamId ? userId : opponentId,
+            awayUserId: awayTeamId === teamId ? userId : opponentId,
+            currentTurn: 'home', // Home team goes first
+            movesRemaining: 3,  // 3 moves per turn
+            turnCount: 0
+          })
+        ]
+      );
+      
+      // Create initial game state
+      const initialState = await this._createInitialGameState(matchId, homeTeamId, awayTeamId);
+      
+      // Store in Redis for fast access
+      await this.redis.set(
+        `match:${matchId}`,
+        JSON.stringify(initialState),
+        'EX',
+        7 * 24 * 60 * 60 // 7 days
+      );
+      
+      // Add to active matches
+      this.activeMatches.set(matchId, initialState);
+      
+      return res.status(201).json({
+        matchId,
+        status: 'created',
+        homeTeamId,
+        awayTeamId,
+        isHomeTeam: homeTeamId === teamId,
+        isAI,
+        initialState
+      });
+    } catch (error) {
+      console.error('Create match error:', error);
+      return res.status(500).json({ error: 'Internal server error' });
+    }
+  }
+  
+  async _createInitialGameState(matchId, homeTeamId, awayTeamId) {
+    // Get team cards and formations
+    const homeTeamResult = await this.db.query(
+      `SELECT t.*, f.positions
+       FROM teams t
+       JOIN formations f ON t.formation = f.formation_id
+       WHERE t.team_id = $1`,
+      [homeTeamId]
+    );
+    
+    const awayTeamResult = await this.db.query(
+      `SELECT t.*, f.positions
+       FROM teams t
+       JOIN formations f ON t.formation = f.formation_id
+       WHERE t.team_id = $1`,
+      [awayTeamId]
+    );
+    
+    const homeTeam = homeTeamResult.rows[0];
+    const awayTeam = awayTeamResult.rows[0];
+    
+    // Get cards for each team
+    const homeTeamCards = await this.db.query(
+      `SELECT tc.position_index, uc.user_card_id, pc.*
+       FROM team_cards tc
+       JOIN user_cards uc ON tc.user_card_id = uc.user_card_id
+       JOIN player_cards pc ON uc.card_id = pc.card_id
+       WHERE tc.team_id = $1`,
+      [homeTeamId]
+    );
+    
+    const awayTeamCards = await this.db.query(
+      `SELECT tc.position_index, uc.user_card_id, pc.*
+       FROM team_cards tc
+       JOIN user_cards uc ON tc.user_card_id = uc.user_card_id
+       JOIN player_cards pc ON uc.card_id = pc.card_id
+       WHERE tc.team_id = $1`,
+      [awayTeamId]
+    );
+    
+    // Initialize game state
+    const initialState = {
+      matchId,
+      homeTeam: {
+        teamId: homeTeamId,
+        name: homeTeam.name,
+        formation: homeTeam.formation,
+        cards: homeTeamCards.rows.map(card => ({
+          cardId: card.card_id,
+          userCardId: card.user_card_id,
+          position: card.position,
+          positionIndex: card.position_index,
+          gridX: this._getInitialX(card.position_index, 'home'),
+          gridY: this._getInitialY(card.position_index, homeTeam.positions),
+          rating: card.rating,
+          movementType: card.movement_type,
+          hasBall: false
+        }))
+      },
+      awayTeam: {
+        teamId: awayTeamId,
+        name: awayTeam.name,
+        formation: awayTeam.formation,
+        cards: awayTeamCards.rows.map(card => ({
+          cardId: card.card_id,
+          userCardId: card.user_card_id,
+          position: card.position,
+          positionIndex: card.position_index,
+          gridX: this._getInitialX(card.position_index, 'away'),
+          gridY: this._getInitialY(card.position_index, awayTeam.positions),
+          rating: card.rating,
+          movementType: card.movement_type,
+          hasBall: false
+        }))
+      },
+      ball: {
+        x: 10, // Center of pitch
+        y: 5,  // Center of pitch
+        possessor: null
+      },
+      currentTurn: 'home',
+      movesRemaining: 3,
+      turnCount: 0,
+      gameTime: 0,
+      homeScore: 0,
+      awayScore: 0,
+      events: []
+    };
+    
+    // Set ball to kickoff team
+    initialState.ball.possessor = initialState.homeTeam.cards.find(card => card.position === 'Midfielder')?.userCardId || null;
+    if (initialState.ball.possessor) {
+      const ballCard = initialState.homeTeam.cards.find(card => card.userCardId === initialState.ball.possessor);
+      if (ballCard) {
+        ballCard.hasBall = true;
+        initialState.ball.x = ballCard.gridX;
+        initialState.ball.y = ballCard.gridY;
+      }
+    }
+    
+    return initialState;
+  }
+  
+  _getInitialX(positionIndex, side) {
+    // Convert position index to grid X coordinate
+    // Home team starts on left side (low X), away team on right side (high X)
+    const baseX = side === 'home' ? 3 : 17;
+    
+    // Adjust based on position type
+    if (positionIndex < 1) {
+      return side === 'home' ? 1 : 19; // Goalkeeper
+    } else if (positionIndex < 5) {
+      return side === 'home' ? baseX - 2 : baseX + 2; // Defenders
+    } else if (positionIndex < 9) {
+      return baseX; // Midfielders
+    } else {
+      return side === 'home' ? baseX + 2 : baseX - 2; // Forwards
+    }
+  }
+  
+  _getInitialY(positionIndex, formationPositions) {
+    // Convert position index to grid Y coordinate
+    // Parse formation positions
+    const positions = typeof formationPositions === 'string' 
+      ? JSON.parse(formationPositions) 
+      : formationPositions;
+    
+    // Find the corresponding position
+    const position = positions.find(p => p.index === positionIndex);
+    
+    if (!position) {
+      // Default to middle if not found
+      return 5;
+    }
+    
+    // Map from formation position (0-10 vertically) to grid coordinates (0-10)
+    return Math.floor(position.y * 10);
+  }
+  
+  async _handleGetMatch(req, res) {
+    const userId = req.user.userId;
+    const matchId = req.params.matchId;
+    
+    try {
+      // Try to get from active matches cache
+      let matchState = this.activeMatches.get(matchId);
+      
+      if (!matchState) {
+        // Try to get from Redis
+        const cachedMatch = await this.redis.get(`match:${matchId}`);
+        
+        if (cachedMatch) {
+          matchState = JSON.parse(cachedMatch);
+          this.activeMatches.set(matchId, matchState);
+        } else {
+          // Get from database
+          const matchResult = await this.db.query(
+            'SELECT * FROM matches WHERE match_id = $1',
+            [matchId]
+          );
+          
+          if (matchResult.rows.length === 0) {
+            return res.status(404).json({ error: 'Match not found' });
+          }
+          
+          // Check if user is a participant
+          const match = matchResult.rows[0];
+          const matchData = match.match_data;
+          
+          if (matchData.homeUserId !== userId && matchData.awayUserId !== userId) {
+            return res.status(403).json({ error: 'You are not a participant in this match' });
+          }
+          
+          // Get all match events
+          const eventsResult = await this.db.query(
+            'SELECT * FROM match_events WHERE match_id = $1 ORDER BY timestamp',
+            [matchId]
+          );
+          
+          // Get all match moves
+          const movesResult = await this.db.query(
+            'SELECT * FROM match_moves WHERE match_id = $1 ORDER BY turn_number, move_index',
+            [matchId]
+          );
+          
+          // Build match state from events and moves
+          matchState = this.gameEngine.reconstructMatchState(match, eventsResult.rows, movesResult.rows);
+        }
+      }
+      
+      // Check if user is a participant
+      if (matchState.homeTeam.userId !== userId && matchState.awayTeam.userId !== userId) {
+        return res.status(403).json({ error: 'You are not a participant in this match' });
+      }
+      
+      return res.json(matchState);
+    } catch (error) {
+      console.error('Get match error:', error);
+      return res.status(500).json({ error: 'Internal server error' });
+    }
+  }
+  
+  async _handleGetMatchHistory(req, res) {
+    const userId = req.user.userId;
+    const { limit = 10, offset = 0 } = req.query;
+    
+    try {
+      // Get recent matches for user
+      const result = await this.db.query(
+        `SELECT m.*, 
+         t1.name as home_team_name, t1.user_id as home_user_id,
+         t2.name as away_team_name, t2.user_id as away_user_id
+         FROM matches m
+         LEFT JOIN teams t1 ON m.home_team_id = t1.team_id
+         LEFT JOIN teams t2 ON m.away_team_id = t2.team_id
+         WHERE t1.user_id = $1 OR t2.user_id = $1
+         ORDER BY m.created_at DESC
+         LIMIT $2 OFFSET $3`,
+        [userId, limit, offset]
+      );
+      
+      // Format response
+      const matches = result.rows.map(match => ({
+        matchId: match.match_id,
+        homeTeam: {
+          teamId: match.home_team_id,
+          name: match.home_team_name,
+          userId: match.home_user_id,
+          isUser: match.home_user_id === userId
+        },
+        awayTeam: {
+          teamId: match.away_team_id,
+          name: match.away_team_name,
+          userId: match.away_user_id,
+          isUser: match.away_user_id === userId
+        },
+        homeScore: match.home_score,
+        awayScore: match.away_score,
+        status: match.status,
+        created: match.created_at,
+        started: match.started_at,
+        ended: match.ended_at,
+        result: match.status === 'completed' ? (
+          match.home_score > match.away_score ? 'home_win' :
+          match.away_score > match.home_score ? 'away_win' :
+          'draw'
+        ) : null,
+        isWin: match.status === 'completed' ? (
+          (match.home_user_id === userId && match.home_score > match.away_score) ||
+          (match.away_user_id === userId && match.away_score > match.home_score)
+        ) : null,
+        isDraw: match.status === 'completed' ? (match.home_score === match.away_score) : null,
+        isLoss: match.status === 'completed' ? (
+          (match.home_user_id === userId && match.home_score < match.away_score) ||
+          (match.away_user_id === userId && match.away_score < match.home_score)
+        ) : null
+      }));
+      
+      return res.json(matches);
+    } catch (error) {
+      console.error('Get match history error:', error);
+      return res.status(500).json({ error: 'Internal server error' });
+    }
+  }
+  
+  async _handleFindMatch(req, res) {
+    const userId = req.user.userId;
+    const { teamId, ratingRange = 100 } = req.body;
+    
+    if (!teamId) {
+      return res.status(400).json({ error: 'Team ID is required' });
+    }
+    
+    try {
+      // Validate team ownership
+      const teamResult = await this.db.query(
+        'SELECT * FROM teams WHERE team_id = $1 AND user_id = $2',
+        [teamId, userId]
+      );
+      
+      if (teamResult.rows.length === 0) {
+        return res.status(404).json({ error: 'Team not found or not owned by user' });
+      }
+      
+      // Add to matchmaking queue
+      const team = teamResult.rows[0];
+      const queueId = await this.matchmaking.addToQueue(userId, teamId, team.rating, ratingRange);
+      
+      // Try to find an immediate match
+      const match = await this.matchmaking.findMatch(userId, teamId, team.rating, ratingRange);
+      
+      if (match) {
+        // Create match with found opponent
+        const matchId = uuid.v4();
+        
+        // Determine who goes first (coin flip)
+        const homeTeamId = Math.random() < 0.5 ? teamId : match.teamId;
+        const awayTeamId = homeTeamId === teamId ? match.teamId : teamId;
+        
+        // Insert match
+        const matchResult = await this.db.query(
+          `INSERT INTO matches (
+            match_id, home_team_id, away_team_id, status, created_at,
+            match_data
+          ) VALUES ($1, $2, $3, $4, NOW(), $5) RETURNING *`,
+          [
+            matchId,
+            homeTeamId,
+            awayTeamId,
+            'created',
+            JSON.stringify({
+              homeUserId: homeTeamId === teamId ? userId : match.userId,
+              awayUserId: awayTeamId === teamId ? userId : match.userId,
+              currentTurn: 'home', // Home team goes first
+              movesRemaining: 3,  // 3 moves per turn
+              turnCount: 0
+            })
+          ]
+        );
+        
+        // Create initial game state
+        const initialState = await this._createInitialGameState(matchId, homeTeamId, awayTeamId);
+        
+        // Store in Redis for fast access
+        await this.redis.set(
+          `match:${matchId}`,
+          JSON.stringify(initialState),
+          'EX',
+          7 * 24 * 60 * 60 // 7 days
+        );
+        
+        // Add to active matches
+        this.activeMatches.set(matchId, initialState);
+        
+        // Notify opponent
+        this.io.to(`user:${match.userId}`).emit('match_found', {
+          matchId,
+          opponent: {
+            userId,
+            teamId
+          },
+          isHomeTeam: homeTeamId === match.teamId
+        });
+        
+        // Return match info
+        return res.json({
+          status: 'match_found',
+          matchId,
+          opponent: {
+            userId: match.userId,
+            teamId: match.teamId
+          },
+          isHomeTeam: homeTeamId === teamId
+        });
+      }
+      
+      // No immediate match found, return queue info
+      return res.json({
+        status: 'in_queue',
+        queueId,
+        message: 'Added to matchmaking queue. Waiting for opponent...'
+      });
+    } catch (error) {
+      console.error('Find match error:', error);
+      return res.status(500).json({ error: 'Internal server error' });
+    }
+  }
+  
+  async _handleCancelMatchmaking(req, res) {
+    const userId = req.user.userId;
+    
+    try {
+      // Remove from matchmaking queue
+      await this.matchmaking.removeFromQueue(userId);
+      
+      return res.json({
+        success: true,
+        message: 'Removed from matchmaking queue'
+      });
+    } catch (error) {
+      console.error('Cancel matchmaking error:', error);
+      return res.status(500).json({ error: 'Internal server error' });
+    }
+  }
+  
+  async _handleJoinMatch(socket, matchId) {
+    const userId = socket.userId;
+    
+    try {
+      // Get match state
+      let matchState = this.activeMatches.get(matchId);
+      
+      if (!matchState) {
+        // Try to get from Redis
+        const cachedMatch = await this.redis.get(`match:${matchId}`);
+        
+        if (cachedMatch) {
+          matchState = JSON.parse(cachedMatch);
+          this.activeMatches.set(matchId, matchState);
+        } else {
+          socket.emit('error', { message: 'Match not found' });
+          return;
+        }
+      }
+      
+      // Check if user is a participant
+      const isHomeTeam = matchState.homeTeam.userId === userId;
+      const isAwayTeam = matchState.awayTeam.userId === userId;
+      
+      if (!isHomeTeam && !isAwayTeam) {
+        socket.emit('error', { message: 'You are not a participant in this match' });
+        return;
+      }
+      
+      // Join match room
+      socket.join(`match:${matchId}`);
+      
+      // Send current state
+      socket.emit('match_state', matchState);
+      
+      // Notify other player that opponent has joined
+      socket.to(`match:${matchId}`).emit('opponent_joined', { userId });
+      
+      console.log(`User ${userId} joined match ${matchId}`);
+    } catch (error) {
+      console.error('Join match error:', error);
+      socket.emit('error', { message: 'Failed to join match' });
+    }
+  }
+  
+  async _handleSocketMove(socket, data) {
+    const userId = socket.userId;
+    const { matchId, cardId, fromX, fromY, toX, toY } = data;
+    
+    try {
+      // Get match state
+      let matchState = this.activeMatches.get(matchId);
+      
+      if (!matchState) {
+        socket.emit('error', { message: 'Match not found' });
+        return;
+      }
+      
+      // Check if it's user's turn
+      const isHomeTeam = matchState.homeTeam.userId === userId;
+      const isAwayTeam = matchState.awayTeam.userId === userId;
+      const isTurn = (isHomeTeam && matchState.currentTurn === 'home') ||
+                     (isAwayTeam && matchState.currentTurn === 'away');
+      
+      if (!isTurn) {
+        socket.emit('error', { message: 'Not your turn' });
+        return;
+      }
+      
+      // Check if user has moves remaining
+      if (matchState.movesRemaining <= 0) {
+        socket.emit('error', { message: 'No moves remaining in this turn' });
+        return;
+      }
+      
+      // Check if card belongs to user
+      const team = isHomeTeam ? matchState.homeTeam : matchState.awayTeam;
+      const card = team.cards.find(c => c.userCardId === cardId);
+      
+      if (!card) {
+        socket.emit('error', { message: 'Card not found or not owned by you' });
+        return;
+      }
+      
+      // Check if move is valid
+      const moveIsValid = this.gameEngine.isValidMove(matchState, card, toX, toY);
+      
+      if (!moveIsValid) {
+        socket.emit('error', { message: 'Invalid move' });// FootballChess Server Architecture
+// Microservices infrastructure for the game backend
+
+/**
+ * API Gateway Service
+ * Entry point for all client requests, handles routing, rate limiting, and authentication
+ */
+class ApiGatewayService {
+  constructor() {
+    this.express = require('express');
+    this.app = this.express();
+    this.jwt = require('jsonwebtoken');
+    this.rateLimit = require('express-rate-limit');
+    this.cors = require('cors');
+    this.proxy = require('http-proxy-middleware');
+    this.serviceRegistry = new ServiceRegistry();
+    this.authMiddleware = this._createAuthMiddleware();
+    this.rateLimiters = this._setupRateLimiters();
+  }
+  
+  initialize() {
+    // Set up middleware
+    this.app.use(this.express.json());
+    this.app.use(this.cors());
+    this.app.use('/api', this.rateLimiters.standard);
+    
+    // Set up routes
+    this._setupRoutes();
+    
+    // Error handling
+    this.app.use(this._errorHandler);
+    
+    // Start server
+    const PORT = process.env.PORT || 3000;
+    this.app.listen(PORT, () => {
+      console.log(`API Gateway running on port ${PORT}`);
+    });
+  }
+  
+  _createAuthMiddleware() {
+    return (req, res, next) => {
+      const authHeader = req.headers.authorization;
+      
+      if (!authHeader || !authHeader.startsWith('Bearer ')) {
+        return res.status(401).json({ error: 'Unauthorized' });
+      }
+      
+      const token = authHeader.split(' ')[1];
+      
+      try {
+        const decoded = this.jwt.verify(token, process.env.JWT_SECRET);
+        req.user = decoded;
+        next();
+      } catch (error) {
+        return res.status(401).json({ error: 'Invalid or expired token' });
+      }
+    };
+  }
+  
+  _setupRateLimiters() {
+    return {
+      standard: this.rateLimit({
+        windowMs: 15 * 60 * 1000, // 15 minutes
+        max: 100, // limit each IP to 100 requests per windowMs
+        standardHeaders: true, // Return rate limit info in the RateLimit-* headers
+        legacyHeaders: false, // Disable the X-RateLimit-* headers
+      }),
+      auth: this.rateLimit({
+        windowMs: 60 * 60 * 1000, // 1 hour
+        max: 10, // limit each IP to 10 requests per windowMs
+        standardHeaders: true,
+        legacyHeaders: false,
+      }),
+      payments: this.rateLimit({
+        windowMs: 60 * 60 * 1000, // 1 hour
+        max: 20, // limit each IP to 20 requests per windowMs
+        standardHeaders: true,
+        legacyHeaders: false,
+      })
+    };
+  }
+  
+  _setupRoutes() {
+    // Public routes
+    this.app.use('/api/auth', this.rateLimiters.auth, this._createProxyMiddleware('auth-service'));
+    this.app.use('/api/public', this._createProxyMiddleware('content-service'));
+    
+    // Protected routes
+    this.app.use('/api/users', this.authMiddleware, this._createProxyMiddleware('user-service'));
+    this.app.use('/api/cards', this.authMiddleware, this._createProxyMiddleware('card-service'));
+    this.app.use('/api/teams', this.authMiddleware, this._createProxyMiddleware('team-service'));
+    this.app.use('/api/matches', this.authMiddleware, this._createProxyMiddleware('match-service'));
+    this.app.use('/api/tournaments', this.authMiddleware, this._createProxyMiddleware('tournament-service'));
+    this.app.use('/api/marketplace', this.authMiddleware, this._createProxyMiddleware('marketplace-service'));
+    this.app.use('/api/rewards', this.authMiddleware, this._createProxyMiddleware('rewards-service'));
+    this.app.use('/api/payments', this.authMiddleware, this.rateLimiters.payments, this._createProxyMiddleware('payment-service'));
+    
+    // Websocket upgrade handling for real-time services
+    this.app.use('/socket', (req, res) => {
+      res.status(426).send('Upgrade Required');
+    });
+  }
+  
+  _createProxyMiddleware(serviceName) {
+    return this.proxy.createProxyMiddleware({
+      target: this.serviceRegistry.getServiceUrl(serviceName),
+      changeOrigin: true,
+      pathRewrite: {
+        [`^/api/${serviceName}`]: '',
+      },
+    });
+  }
+  
+  _errorHandler(err, req, res, next) {
+    console.error(err.stack);
+    
+    if (res.headersSent) {
+      return next(err);
+    }
+    
+    res.status(500).json({
+      error: 'Internal Server Error',
+      message: process.env.NODE_ENV === 'production' ? undefined : err.message
+    });
+  }
+}
+
+/**
+ * Service Registry
+ * Keeps track of available microservices and their locations
+ */
+class ServiceRegistry {
+  constructor() {
+    this.services = {
+      'auth-service': process.env.AUTH_SERVICE_URL || 'http://auth-service:4000',
+      'user-service': process.env.USER_SERVICE_URL || 'http://user-service:4001',
+      'card-service': process.env.CARD_SERVICE_URL || 'http://card-service:4002',
+      'team-service': process.env.TEAM_SERVICE_URL || 'http://team-service:4003',
+      'match-service': process.env.MATCH_SERVICE_URL || 'http://match-service:4004',
+      'tournament-service': process.env.TOURNAMENT_SERVICE_URL || 'http://tournament-service:4005',
+      'marketplace-service': process.env.MARKETPLACE_SERVICE_URL || 'http://marketplace-service:4006',
+      'rewards-service': process.env.REWARDS_SERVICE_URL || 'http://rewards-service:4007',
+      'payment-service': process.env.PAYMENT_SERVICE_URL || 'http://payment-service:4008',
+      'messaging-service': process.env.MESSAGING_SERVICE_URL || 'http://messaging-service:4009',
+      'content-service': process.env.CONTENT_SERVICE_URL || 'http://content-service:4010',
+      'blockchain-service': process.env.BLOCKCHAIN_SERVICE_URL || 'http://blockchain-service:4011'
+    };
+    
+    // In a production implementation, this would use service discovery (e.g., Consul, etcd)
+  }
+  
+  getServiceUrl(serviceName) {
+    return this.services[serviceName];
+  }
+  
+  registerService(serviceName, url) {
+    this.services[serviceName] = url;
+  }
+  
+  listServices() {
+    return Object.keys(this.services).map(name => ({
+      name,
+      url: this.services[name]
+    }));
+  }
+}
+
+/**
+ * Auth Service
+ * Handles user authentication, registration, and token management
+ */
+class AuthService {
+  constructor() {
+    this.express = require('express');
+    this.app = this.express();
+    this.jwt = require('jsonwebtoken');
+    this.bcrypt = require('bcrypt');
+    this.db = new PostgresConnection(process.env.DB_CONNECTION_STRING);
+    this.redis = new RedisClient(process.env.REDIS_URL);
+  }
+  
+  initialize() {
+    // Set up middleware
+    this.app.use(this.express.json());
+    
+    // Set up routes
+    this._setupRoutes();
+    
+    // Start server
+    const PORT = process.env.PORT || 4000;
+    this.app.listen(PORT, () => {
+      console.log(`Auth Service running on port ${PORT}`);
+    });
+  }
+  
+  _setupRoutes() {
+    this.app.post('/register', this._handleRegister.bind(this));
+    this.app.post('/login', this._handleLogin.bind(this));
+    this.app.post('/refresh', this._handleRefreshToken.bind(this));
+    this.app.post('/verify-age', this._handleVerifyAge.bind(this));
+    this.app.post('/logout', this._handleLogout.bind(this));
+  }
+  
+  async _handleRegister(req, res) {
+    const { username, email, password, dateOfBirth } = req.body;
+    
+    try {
+      // Validate input
+      if (!username || !email || !password || !dateOfBirth) {
+        return res.status(400).json({ error: 'All fields are required' });
+      }
+      
+      // Check if user exists
+      const existingUser = await this.db.query(
+        'SELECT * FROM users WHERE username = $1 OR email = $2',
+        [username, email]
+      );
+      
+      if (existingUser.rows.length > 0) {
+        return res.status(409).json({ error: 'Username or email already exists' });
+      }
+      
+      // Calculate age
+      const birthDate = new Date(dateOfBirth);
+      const today = new Date();
+      let age = today.getFullYear() - birthDate.getFullYear();
+      const monthDiff = today.getMonth() - birthDate.getMonth();
+      
+      if (monthDiff < 0 || (monthDiff === 0 && today.getDate() < birthDate.getDate())) {
+        age--;
+      }
+      
+      // Hash password
+      const saltRounds = 10;
+      const hashedPassword = await this.bcrypt.hash(password, saltRounds);
+      
+      // Insert user
+      const userId = uuid.v4();
+      const newUser = await this.db.query(
+        `INSERT INTO users (
+          user_id, username, email, password_hash, date_of_birth, age, is_underage, created_at
+        ) VALUES ($1, $2, $3, $4, $5, $6, $7, NOW()) RETURNING *`,
+        [userId, username, email, hashedPassword, dateOfBirth, age, age < 18]
+      );
+      
+      // Create user profile
+      await this.db.query(
+        `INSERT INTO user_profiles (
+          profile_id, user_id, created_at, updated_at
+        ) VALUES ($1, $2, NOW(), NOW())`,
+        [uuid.v4(), userId]
+      );
+      
+      // Initialize age verification
+      await this._initializeAgeVerification(userId, dateOfBirth, age);
+      
+      // Generate tokens
+      const tokens = this._generateTokens(newUser.rows[0]);
+      
+      // Store refresh token
+      await this.redis.set(
+        `refresh_token:${tokens.refreshToken}`,
+        userId,
+        'EX',
+        7 * 24 * 60 * 60 // 7 days
+      );
+      
+      // Return user data and tokens
+      return res.status(201).json({
+        user: {
+          id: newUser.rows[0].user_id,
+          username: newUser.rows[0].username,
+          email: newUser.rows[0].email,
+          age: newUser.rows[0].age,
+          isUnderage: newUser.rows[0].is_underage
+        },
+        ...tokens
+      });
+    } catch (error) {
+      console.error('Registration error:', error);
+      return res.status(500).json({ error: 'Internal server error' });
+    }
+  }
+  
+  async _handleLogin(req, res) {
+    const { username, password } = req.body;
+    
+    try {
+      // Validate input
+      if (!username || !password) {
+        return res.status(400).json({ error: 'Username and password are required' });
+      }
+      
+      // Find user
+      const result = await this.db.query(
+        'SELECT * FROM users WHERE username = $1',
+        [username]
+      );
+      
+      if (result.rows.length === 0) {
+        return res.status(401).json({ error: 'Invalid credentials' });
+      }
+      
+      const user = result.rows[0];
+      
+      // Check password
+      const passwordMatch = await this.bcrypt.compare(password, user.password_hash);
+      
+      if (!passwordMatch) {
+        return res.status(401).json({ error: 'Invalid credentials' });
+      }
+      
+      // Generate tokens
+      const tokens = this._generateTokens(user);
+      
+      // Store refresh token
+      await this.redis.set(
+        `refresh_token:${tokens.refreshToken}`,
+        user.user_id,
+        'EX',
+        7 * 24 * 60 * 60 // 7 days
+      );
+      
+      // Update last login
+      await this.db.query(
+        'UPDATE users SET last_login = NOW() WHERE user_id = $1',
+        [user.user_id]
+      );
+      
+      // Record login
+      await this.db.query(
+        `INSERT INTO user_logins (
+          login_id, user_id, ip_address, user_agent, platform, success, login_at
+        ) VALUES ($1, $2, $3, $4, $5, $6, NOW())`,
+        [
+          uuid.v4(),
+          user.user_id,
+          req.ip,
+          req.headers['user-agent'],
+          req.body.platform || 'web',
+          true
+        ]
+      );
+      
+      // Return user data and tokens
+      return res.json({
+        user: {
+          id: user.user_id,
+          username: user.username,
+          email: user.email,
+          age: user.age,
+          isUnderage: user.is_underage
+        },
+        ...tokens
+      });
+    } catch (error) {
+      console.error('Login error:', error);
+      return res.status(500).json({ error: 'Internal server error' });
+    }
+  }
+  
+  async _handleRefreshToken(req, res) {
+    const { refreshToken } = req.body;
+    
+    if (!refreshToken) {
+      return res.status(400).json({ error: 'Refresh token is required' });
+    }
+    
+    try {
+      // Verify if token exists in Redis
+      const userId = await this.redis.get(`refresh_token:${refreshToken}`);
+      
+      if (!userId) {
+        return res.status(401).json({ error: 'Invalid refresh token' });
+      }
+      
+      // Verify token signature
+      try {
+        const decoded = this.jwt.verify(refreshToken, process.env.JWT_REFRESH_SECRET);
+        
+        if (decoded.userId !== userId) {
+          throw new Error('Token mismatch');
+        }
+      } catch (err) {
+        // Delete invalid token
+        await this.redis.del(`refresh_token:${refreshToken}`);
+        return res.status(401).json({ error: 'Invalid refresh token' });
+      }
+      
+      // Get user
+      const result = await this.db.query(
+        'SELECT * FROM users WHERE user_id = $1',
+        [userId]
+      );
+      
+      if (result.rows.length === 0) {
+        return res.status(401).json({ error: 'User not found' });
+      }
+      
+      const user = result.rows[0];
+      
+      // Generate new tokens
+      const tokens = this._generateTokens(user);
+      
+      // Invalidate old refresh token
+      await this.redis.del(`refresh_token:${refreshToken}`);
+      
+      // Store new refresh token
+      await this.redis.set(
+        `refresh_token:${tokens.refreshToken}`,
+        user.user_id,
+        'EX',
+        7 * 24 * 60 * 60 // 7 days
+      );
+      
+      // Return new tokens
+      return res.json({
+        ...tokens,
+        user: {
+          id: user.user_id,
+          username: user.username,
+          email: user.email,
+          age: user.age,
+          isUnderage: user.is_underage
+        }
+      });
+    } catch (error) {
+      console.error('Refresh token error:', error);
+      return res.status(500).json({ error: 'Internal server error' });
+    }
+  }
+  
+  async _handleVerifyAge(req, res) {
+    const { userId, documentType, documentData } = req.body;
+    
+    if (!userId || !documentType || !documentData) {
+      return res.status(400).json({ error: 'All fields are required' });
+    }
+    
+    try {
+      // Get user
+      const result = await this.db.query(
+        'SELECT * FROM users WHERE user_id = $1',
+        [userId]
+      );
+      
+      if (result.rows.length === 0) {
+        return res.status(404).json({ error: 'User not found' });
+      }
+      
+      // Get age verification status
+      const verificationResult = await this.db.query(
+        'SELECT * FROM age_verification WHERE user_id = $1',
+        [userId]
+      );
+      
+      if (verificationResult.rows.length === 0) {
+        return res.status(404).json({ error: 'Age verification record not found' });
+      }
+      
+      // In a real implementation, this would verify the document with a third-party service
+      // For this example, we'll simulate verification
+      
+      // Update verification status
+      await this.db.query(
+        `UPDATE age_verification SET 
+         verified = TRUE,
+         verification_method = $1,
+         verification_date = NOW(),
+         updated_at = NOW()
+         WHERE user_id = $2`,
+        [documentType, userId]
+      );
+      
+      return res.json({
+        success: true,
+        verified: true,
+        message: 'Age verification successful'
+      });
+    } catch (error) {
+      console.error('Age verification error:', error);
+      return res.status(500).json({ error: 'Internal server error' });
+    }
+  }
+  
+  async _handleLogout(req, res) {
+    const { refreshToken } = req.body;
+    
+    if (!refreshToken) {
+      return res.status(400).json({ error: 'Refresh token is required' });
+    }
+    
+    try {
+      // Invalidate refresh token
+      await this.redis.del(`refresh_token:${refreshToken}`);
+      
+      return res.json({ success: true });
+    } catch (error) {
+      console.error('Logout error:', error);
+      return res.status(500).json({ error: 'Internal server error' });
+    }
+  }
+  
+  _generateTokens(user) {
+    // Create access token (short-lived)
+    const accessToken = this.jwt.sign(
+      {
+        userId: user.user_id,
+        username: user.username,
+        email: user.email,
+        isUnderage: user.is_underage,
+        age: user.age
+      },
+      process.env.JWT_SECRET,
+      { expiresIn: '15m' }
+    );
+    
+    // Create refresh token (long-lived)
+    const refreshToken = this.jwt.sign(
+      {
+        userId: user.user_id,
+        type: 'refresh'
+      },
+      process.env.JWT_REFRESH_SECRET,
+      { expiresIn: '7d' }
+    );
+    
+    return {
+      accessToken,
+      refreshToken,
+      expiresIn: 15 * 60 // 15 minutes in seconds
+    };
+  }
+  
+  async _initializeAgeVerification(userId, dateOfBirth, age) {
+    // Calculate unlock date (18th birthday)
+    const birthDate = new Date(dateOfBirth);
+    const unlockDate = new Date(birthDate);
+    unlockDate.setFullYear(birthDate.getFullYear() + 18);
+    
+    // Create age verification record
+    await this.db.query(
+      `INSERT INTO age_verification (
+        verification_id, user_id, date_of_birth, age, is_underage, 
+        unlock_date, created_at, updated_at
+      ) VALUES ($1, $2, $3, $4, $5, $6, NOW(), NOW())`,
+      [uuid.v4(), userId, dateOfBirth, age, age < 18, unlockDate]
+    );
+  }
+}
+
+/**
+ * User Service
+ * Manages user profiles, progression, and settings
+ */
+class UserService {
+  constructor() {
+    this.express = require('express');
+    this.app = this.express();
+    this.db = new PostgresConnection(process.env.DB_CONNECTION_STRING);
+    this.redis = new RedisClient(process.env.REDIS_URL);
+    this.authMiddleware = this._createAuthMiddleware();
+  }
+  
+  initialize() {
+    // Set up middleware
+    this.app.use(this.express.json());
+    this.app.use(this.authMiddleware);
+    
+    // Set up routes
+    this._setupRoutes();
+    
+    // Start server
+    const PORT = process.env.PORT || 4001;
+    this.app.listen(PORT, () => {
+      console.log(`User Service running on port ${PORT}`);
+    });
+  }
+  
+  _createAuthMiddleware() {
+    return (req, res, next) => {
+      const user = req.headers['x-user'];
+      
+      if (!user) {
+        return res.status(401).json({ error: 'User information missing' });
+      }
+      
+      try {
+        req.user = JSON.parse(user);
+        next();
+      } catch (error) {
+        return res.status(401).json({ error: 'Invalid user information' });
+      }
+    };
+  }
+  
+  _setupRoutes() {
+    this.app.get('/me', this._handleGetCurrentUser.bind(this));
+    this.app.patch('/me', this._handleUpdateProfile.bind(this));
+    this.app.get('/progression', this._handleGetProgression.bind(this));
+    this.app.get('/cards', this._handleGetUserCards.bind(this));
+    this.app.get('/teams', this._handleGetUserTeams.bind(this));
+    this.app.post('/kyc/submit', this._handleSubmitKYC.bind(this));
+    this.app.get('/kyc/status', this._handleGetKYCStatus.bind(this));
+    this.app.get('/notifications', this._handleGetNotifications.bind(this));
+    this.app.post('/notifications/:id/read', this._handleMarkNotificationRead.bind(this));
+  }
+  
+  async _handleGetCurrentUser(req, res) {
+    const userId = req.user.userId;
+    
+    try {
+      // Get user profile
+      const profileResult = await this.db.query(
+        `SELECT u.user_id, u.username, u.email, u.age, u.is_underage, u.created_at,
+         up.display_name, up.avatar_url, up.bio, up.favorite_team
+         FROM users u
+         JOIN user_profiles up ON u.user_id = up.user_id
+         WHERE u.user_id = $1`,
+        [userId]
+      );
+      
+      if (profileResult.rows.length === 0) {
+        return res.status(404).json({ error: 'User not found' });
+      }
+      
+      // Get age verification status
+      const verificationResult = await this.db.query(
+        'SELECT * FROM age_verification WHERE user_id = $1',
+        [userId]
+      );
+      
+      // Get KYC status if applicable
+      let kycStatus = null;
+      if (!profileResult.rows[0].is_underage) {
+        const kycResult = await this.db.query(
+          'SELECT * FROM kyc_requests WHERE user_id = $1 ORDER BY submitted_at DESC LIMIT 1',
+          [userId]
+        );
+        
+        if (kycResult.rows.length > 0) {
+          kycStatus = kycResult.rows[0];
+        }
+      }
+      
+      // Check for wallet connection
+      const walletResult = await this.db.query(
+        'SELECT * FROM wallet_connections WHERE user_id = $1 AND is_active = TRUE',
+        [userId]
+      );
+      
+      // Format the response
+      const user = profileResult.rows[0];
+      
+      return res.json({
+        id: user.user_id,
+        username: user.username,
+        email: user.email,
+        displayName: user.display_name,
+        avatarUrl: user.avatar_url,
+        bio: user.bio,
+        favoriteTeam: user.favorite_team,
+        age: user.age,
+        isUnderage: user.is_underage,
+        createdAt: user.created_at,
+        ageVerification: verificationResult.rows[0] || null,
+        kycStatus: kycStatus ? {
+          status: kycStatus.status,
+          submittedAt: kycStatus.submitted_at,
+          processedAt: kycStatus.processed_at
+        } : null,
+        walletConnected: walletResult.rows.length > 0,
+        walletAddress: walletResult.rows[0]?.wallet_address
+      });
+    } catch (error) {
+      console.error('Get user error:', error);
+      return res.status(500).json({ error: 'Internal server error' });
+    }
+  }
+  
+  async _handleUpdateProfile(req, res) {
+    const userId = req.user.userId;
+    const { displayName, avatarUrl, bio, favoriteTeam } = req.body;
+    
+    try {
+      // Update profile
+      await this.db.query(
+        `UPDATE user_profiles SET
+         display_name = COALESCE($1, display_name),
+         avatar_url = COALESCE($2, avatar_url),
+         bio = COALESCE($3, bio),
+         favorite_team = COALESCE($4, favorite_team),
+         updated_at = NOW()
+         WHERE user_id = $5`,
+        [displayName, avatarUrl, bio, favoriteTeam, userId]
+      );
+      
+      // Get updated profile
+      const result = await this.db.query(
+        'SELECT * FROM user_profiles WHERE user_id = $1',
+        [userId]
+      );
+      
+      return res.json(result.rows[0]);
+    } catch (error) {
+      console.error('Update profile error:', error);
+      return res.status(500).json({ error: 'Internal server error' });
+    }
+  }
+  
+  async _handleGetProgression(req, res) {
+    const userId = req.user.userId;
+    
+    try {
+      // Get player progression
+      const result = await this.db.query(
+        'SELECT * FROM player_progression WHERE user_id = $1',
+        [userId]
+      );
+      
+      if (result.rows.length === 0) {
+        // Initialize progression if it doesn't exist
+        const newProgression = await this.db.query(
+          `INSERT INTO player_progression (
+            progression_id, user_id, level, experience, coins,
+            created_at, updated_at
+          ) VALUES ($1, $2, 1, 0, 0, NOW(), NOW()) RETURNING *`,
+          [uuid.v4(), userId]
+        );
+        
+        return res.json(newProgression.rows[0]);
+      }
+      
+      // Get level rewards info
+      const rewardsResult = await this.db.query(
+        'SELECT * FROM level_rewards WHERE level = $1',
+        [result.rows[0].level + 1]
+      );
+      
+      // Calculate XP needed for next level
+      const progression = result.rows[0];
+      const nextLevelXp = this._calculateXpForLevel(progression.level + 1);
+      const currentLevelXp = this._calculateXpForLevel(progression.level);
+      const xpForNextLevel = nextLevelXp - currentLevelXp;
+      const xpProgress = progression.experience - currentLevelXp;
+      
+      return res.json({
+        ...progression,
+        nextLevelRewards: rewardsResult.rows[0] || null,
+        xpForNextLevel,
+        xpProgress,
+        xpPercentage: Math.round((xpProgress / xpForNextLevel) * 100)
+      });
+    } catch (error) {
+      console.error('Get progression error:', error);
+      return res.status(500).json({ error: 'Internal server error' });
+    }
+  }
+  
+  _calculateXpForLevel(level) {
+    // Simple quadratic formula for XP requirements
+    // Level 1: 0 XP
+    // Level 2: 100 XP
+    // Level 3: 300 XP
+    // Level 4: 600 XP
+    // etc.
+    if (level <= 1) return 0;
+    return 50 * level * (level - 1);
+  }
+  
+  async _handleGetUserCards(req, res) {
+    const userId = req.user.userId;
+    const { limit = 50, offset = 0, sortBy = 'rating', sortOrder = 'DESC' } = req.query;
+    
+    try {
+      // Get user cards with player card details
+      const result = await this.db.query(
+        `SELECT uc.*, pc.*
+         FROM user_cards uc
+         JOIN player_cards pc ON uc.card_id = pc.card_id
+         WHERE uc.user_id = $1
+         ORDER BY pc.${sortBy} ${sortOrder}
+         LIMIT $2 OFFSET $3`,
+        [userId, limit, offset]
+      );
+      
+      // Get total count for pagination
+      const countResult = await this.db.query(
+        'SELECT COUNT(*) FROM user_cards WHERE user_id = $1',
+        [userId]
+      );
+      
+      return res.json({
+        cards: result.rows,
+        total: parseInt(countResult.rows[0].count)
+      });
+    } catch (error) {
+      console.error('Get user cards error:', error);
+      return res.status(500).json({ error: 'Internal server error' });
+    }
+  }
+  
+  async _handleGetUserTeams(req, res) {
+    const userId = req.user.userId;
+    
+    try {
+      // Get user teams
+      const teamsResult = await this.db.query(
+        'SELECT * FROM teams WHERE user_id = $1',
+        [userId]
+      );
+      
+      // Get cards for each team
+      const teams = await Promise.all(teamsResult.rows.map(async (team) => {
+        const cardsResult = await this.db.query(
+          `SELECT tc.position_index, uc.*, pc.*
+           FROM team_cards tc
+           JOIN user_cards uc ON tc.user_card_id = uc.user_card_id
+           JOIN player_cards pc ON uc.card_id = pc.card_id
+           WHERE tc.team_id = $1
+           ORDER BY tc.position_index`,
+          [team.team_id]
+        );
+        
+        return {
+          ...team,
+          cards: cardsResult.rows
+        };
+      }));
+      
+      return res.json(teams);
+    } catch (error) {
+      console.error('Get user teams error:', error);
+      return res.status(500).json({ error: 'Internal server error' });
+    }
+  }
+  
+  async _handleSubmitKYC(req, res) {
+    const userId = req.user.userId;
+    const { kycData, documents } = req.body;
+    
+    

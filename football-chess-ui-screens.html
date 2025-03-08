@@ -1,0 +1,978 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>FootballChess - UI/UX Interfaces</title>
+    <style>
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            line-height: 1.6;
+            color: #333;
+            background-color: #f5f7fa;
+            margin: 0;
+            padding: 0;
+        }
+        
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+        
+        header {
+            background-color: #1A237E;
+            color: white;
+            padding: 20px 0;
+            text-align: center;
+            margin-bottom: 40px;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+        }
+        
+        h1 {
+            margin: 0;
+            font-size: 2.5em;
+        }
+        
+        h2 {
+            color: #1A237E;
+            border-bottom: 2px solid #1A237E;
+            padding-bottom: 10px;
+            margin-top: 40px;
+        }
+        
+        h3 {
+            color: #1A237E;
+            margin-top: 25px;
+        }
+        
+        .interface-group {
+            margin-bottom: 50px;
+        }
+        
+        .interface-item {
+            background-color: white;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+            padding: 20px;
+            margin-bottom: 20px;
+        }
+        
+        .interface-item h3 {
+            margin-top: 0;
+        }
+        
+        .interface-description {
+            margin-bottom: 15px;
+        }
+        
+        .interface-elements {
+            background-color: #f0f2f5;
+            padding: 15px;
+            border-radius: 5px;
+        }
+        
+        .element-list {
+            list-style-type: none;
+            padding-left: 0;
+        }
+        
+        .element-list li {
+            padding: 8px 0;
+            border-bottom: 1px solid #ddd;
+        }
+        
+        .element-list li:last-child {
+            border-bottom: none;
+        }
+        
+        .design-notes {
+            font-style: italic;
+            color: #666;
+            margin-top: 15px;
+            padding-top: 15px;
+            border-top: 1px dashed #ddd;
+        }
+        
+        .responsive-notes {
+            background-color: #e8f5e9;
+            padding: 10px;
+            border-radius: 5px;
+            margin-top: 15px;
+        }
+        
+        footer {
+            text-align: center;
+            margin-top: 50px;
+            padding: 20px;
+            color: #666;
+            font-size: 0.9em;
+        }
+    </style>
+</head>
+<body>
+    <header>
+        <h1>FootballChess UI/UX Interfaces</h1>
+        <p>Comprehensive interface designs for web, mobile, and desktop platforms</p>
+    </header>
+    
+    <div class="container">
+        <section class="interface-group">
+            <h2>1. User Onboarding Screens</h2>
+            
+            <div class="interface-item">
+                <h3>1.1 Welcome & Login Screen</h3>
+                <div class="interface-description">
+                    <p>The initial screen users see when opening the game for the first time. It provides login options and introduces the game concept.</p>
+                </div>
+                <div class="interface-elements">
+                    <h4>UI Elements:</h4>
+                    <ul class="element-list">
+                        <li>Game logo and branding ("FootballChess" with football and chess elements)</li>
+                        <li>Login form (email/username and password fields)</li>
+                        <li>Social login options (Google, Facebook, Apple)</li>
+                        <li>Create Account button</li>
+                        <li>Guest Play option</li>
+                        <li>Background showcasing premium football cards to generate interest</li>
+                    </ul>
+                </div>
+                <div class="design-notes">
+                    <p>Design Note: Take advantage of the larger screen space to show more information at once. Use multi-column layouts and keep important information visible at all times.</p>
+                </div>
+            </div>
+            
+            <div class="interface-item">
+                <h3>9.2 Desktop Gameplay Controls</h3>
+                <div class="interface-description">
+                    <p>Keyboard and mouse optimized controls for desktop gameplay.</p>
+                </div>
+                <div class="interface-elements">
+                    <h4>UI Elements:</h4>
+                    <ul class="element-list">
+                        <li>Clickable game board with hover states</li>
+                        <li>Right-click context menus for quick actions</li>
+                        <li>Keyboard shortcuts (arrow keys for navigation, number keys for actions)</li>
+                        <li>Minimap for pitch overview</li>
+                        <li>Detailed player stats sidebar</li>
+                        <li>Drag-and-drop functionality for player movement</li>
+                    </ul>
+                </div>
+                <div class="design-notes">
+                    <p>Design Note: Implement robust keyboard controls for power users. Show keyboard shortcut hints in the interface to help users learn them.</p>
+                </div>
+            </div>
+        </section>
+        
+        <section class="interface-group">
+            <h2>10. Special Feature Interfaces</h2>
+            
+            <div class="interface-item">
+                <h3>10.1 Card Pack Opening Screen</h3>
+                <div class="interface-description">
+                    <p>Interactive interface for opening card packs with animations and reveals.</p>
+                </div>
+                <div class="interface-elements">
+                    <h4>UI Elements:</h4>
+                    <ul class="element-list">
+                        <li>Pack selection with visual representation</li>
+                        <li>Opening animation sequence</li>
+                        <li>Card reveal interactions (tap/click to flip)</li>
+                        <li>Rarity indicators and special effects for rare cards</li>
+                        <li>Collection status update</li>
+                        <li>Share result option</li>
+                        <li>Open Another Pack button</li>
+                        <li>View All Cards button</li>
+                    </ul>
+                </div>
+                <div class="design-notes">
+                    <p>Design Note: This should be one of the most visually impressive and satisfying screens. Use particle effects, sound, and animation to create excitement, especially for rare card reveals.</p>
+                </div>
+            </div>
+            
+            <div class="interface-item">
+                <h3>10.2 Season Progress Screen</h3>
+                <div class="interface-description">
+                    <p>Visualization of player's progress through a season with rewards tracking.</p>
+                </div>
+                <div class="interface-elements">
+                    <h4>UI Elements:</h4>
+                    <ul class="element-list">
+                        <li>Season timeline visualization</li>
+                        <li>Reward tracks (free and premium)</li>
+                        <li>Progress bar with current level</li>
+                        <li>Upcoming rewards preview</li>
+                        <li>Season challenges list</li>
+                        <li>Season statistics</li>
+                        <li>Season Pass upgrade option</li>
+                        <li>Time remaining indicator</li>
+                    </ul>
+                </div>
+                <div class="design-notes">
+                    <p>Design Note: Use clear visual progression to motivate players. Highlight attainable next rewards to encourage continued play.</p>
+                </div>
+            </div>
+            
+            <div class="interface-item">
+                <h3>10.3 Photo Capture & Customization Screen</h3>
+                <div class="interface-description">
+                    <p>Interface for capturing, editing, and applying user photos to create custom player cards.</p>
+                </div>
+                <div class="interface-elements">
+                    <h4>UI Elements:</h4>
+                    <ul class="element-list">
+                        <li>Camera viewfinder with guidance overlay</li>
+                        <li>Photo capture button</li>
+                        <li>Gallery import option</li>
+                        <li>Photo editing tools (crop, rotate, filters, effects)</li>
+                        <li>Face detection for optimal positioning</li>
+                        <li>Background removal tool</li>
+                        <li>Card template preview</li>
+                        <li>Confirmation and save options</li>
+                    </ul>
+                </div>
+                <div class="design-notes">
+                    <p>Design Note: Make this process fun and intuitive. Provide templates and positioning guides to help users create good-looking cards. Include safety features to prevent inappropriate content.</p>
+                </div>
+            </div>
+            
+            <div class="interface-item">
+                <h3>10.4 Injury Management Screen</h3>
+                <div class="interface-description">
+                    <p>Interface for viewing and managing player injuries during matches and seasons.</p>
+                </div>
+                <div class="interface-elements">
+                    <h4>UI Elements:</h4>
+                    <ul class="element-list">
+                        <li>Injured players list</li>
+                        <li>Injury type and severity information</li>
+                        <li>Recovery time estimates</li>
+                        <li>Treatment options</li>
+                        <li>Substitution recommendations</li>
+                        <li>Performance impact indicators</li>
+                        <li>Medical item usage interface</li>
+                    </ul>
+                </div>
+                <div class="design-notes">
+                    <p>Design Note: Use appropriate visualizations to indicate injury locations and severity. Make the interface informative but not overly clinical.</p>
+                </div>
+            </div>
+        </section>
+        
+        <section class="interface-group">
+            <h2>11. Notification & Messaging Interfaces</h2>
+            
+            <div class="interface-item">
+                <h3>11.1 In-Game Notifications</h3>
+                <div class="interface-description">
+                    <p>System for displaying important notifications during gameplay without disrupting the experience.</p>
+                </div>
+                <div class="interface-elements">
+                    <h4>UI Elements:</h4>
+                    <ul class="element-list">
+                        <li>Toast notifications for quick updates</li>
+                        <li>Alert dialogs for important events</li>
+                        <li>Status icons with notification badges</li>
+                        <li>Notification center/drawer</li>
+                        <li>Sound cues for different notification types</li>
+                        <li>Dismiss/acknowledge controls</li>
+                    </ul>
+                </div>
+                <div class="design-notes">
+                    <p>Design Note: Ensure notifications are noticeable but not intrusive. Use different styles based on importance. Allow customization of notification preferences.</p>
+                </div>
+            </div>
+            
+            <div class="interface-item">
+                <h3>11.2 Chat & Messaging System</h3>
+                <div class="interface-description">
+                    <p>Interface for communicating with friends and opponents.</p>
+                </div>
+                <div class="interface-elements">
+                    <h4>UI Elements:</h4>
+                    <ul class="element-list">
+                        <li>Friends chat list</li>
+                        <li>Message composition area</li>
+                        <li>Quick message templates</li>
+                        <li>Emoji selector</li>
+                        <li>Unread message indicators</li>
+                        <li>Online status display</li>
+                        <li>Chat minimization/expansion controls</li>
+                        <li>Reporting/blocking options</li>
+                    </ul>
+                </div>
+                <div class="design-notes">
+                    <p>Design Note: Implement moderation features to prevent abuse. In-game chat should be collapsible to avoid distracting from gameplay.</p>
+                </div>
+            </div>
+        </section>
+        
+        <section class="interface-group">
+            <h2>12. Visual Style Guide</h2>
+            
+            <div class="interface-item">
+                <h3>12.1 Color Palette</h3>
+                <div class="interface-description">
+                    <p>Primary color scheme and usage guidelines for consistent visual identity.</p>
+                </div>
+                <div class="interface-elements">
+                    <h4>UI Elements:</h4>
+                    <ul class="element-list">
+                        <li>Primary colors: Deep blues (#0D47A1, #1A237E) for headers and primary UI</li>
+                        <li>Secondary colors: Grass greens (#388E3C, #2E7D32) for pitch and game elements</li>
+                        <li>Accent colors: Gold (#FFC107) for highlights and premium elements</li>
+                        <li>Alert colors: Red (#F44336) for warnings, Green (#4CAF50) for success</li>
+                        <li>Neutral colors: Grays and whites for backgrounds and text</li>
+                        <li>Team colors: Home (red variants) and Away (blue variants)</li>
+                    </ul>
+                </div>
+                <div class="design-notes">
+                    <p>Design Note: The color scheme should evoke both football (through field greens) and strategy games (through deep blues). Use gold accents to convey premium value in the card collecting aspects.</p>
+                </div>
+            </div>
+            
+            <div class="interface-item">
+                <h3>12.2 Typography</h3>
+                <div class="interface-description">
+                    <p>Font selections and text styling guidelines for the game interface.</p>
+                </div>
+                <div class="interface-elements">
+                    <h4>UI Elements:</h4>
+                    <ul class="element-list">
+                        <li>Primary font: Sans-serif font family for clear legibility (Arial, Roboto, or similar)</li>
+                        <li>Heading text: Bold weight, slightly condensed for titles</li>
+                        <li>Body text: Regular weight with good line spacing</li>
+                        <li>Button text: Medium or semibold weight</li>
+                        <li>Card typography: Bold for player names, condensed for statistics</li>
+                        <li>Minimum font size guidelines for readability</li>
+                    </ul>
+                </div>
+                <div class="design-notes">
+                    <p>Design Note: Use typography hierarchy consistently to guide users' attention. Ensure all text is readable on various backgrounds and screen sizes.</p>
+                </div>
+            </div>
+            
+            <div class="interface-item">
+                <h3>12.3 Iconography</h3>
+                <div class="interface-description">
+                    <p>Icon style and usage guidelines for consistent visual communication.</p>
+                </div>
+                <div class="interface-elements">
+                    <h4>UI Elements:</h4>
+                    <ul class="element-list">
+                        <li>Navigation icons (Home, Shop, Collection, etc.)</li>
+                        <li>Action icons (Pass, Shoot, End Turn)</li>
+                        <li>Status icons (Injury, Cards, Ball Possession)</li>
+                        <li>Player position icons (GK, DEF, MID, FWD)</li>
+                        <li>Currency and resource icons</li>
+                        <li>Movement pattern indicators</li>
+                    </ul>
+                </div>
+                <div class="design-notes">
+                    <p>Design Note: Use a consistent stroke weight and style for all icons. Icons should be simple and instantly recognizable, combining football conventions with chess-like strategic elements.</p>
+                </div>
+            </div>
+            
+            <div class="interface-item">
+                <h3>12.4 Animation Guidelines</h3>
+                <div class="interface-description">
+                    <p>Standards for animations and transitions throughout the interface.</p>
+                </div>
+                <div class="interface-elements">
+                    <h4>UI Elements:</h4>
+                    <ul class="element-list">
+                        <li>Transition timing standards (150-300ms for UI elements)</li>
+                        <li>Easing functions for smooth motion</li>
+                        <li>Card movement and action animations</li>
+                        <li>Loading and progress indicators</li>
+                        <li>Celebratory animations for rewards and achievements</li>
+                        <li>Interactive feedback animations</li>
+                    </ul>
+                </div>
+                <div class="design-notes">
+                    <p>Design Note: Animations should enhance the experience without causing delays. Use subtle animations for common actions and more elaborate ones for significant events like scoring goals or opening premium card packs.</p>
+                </div>
+            </div>
+        </section>
+        
+        <footer>
+            <p>FootballChess UI/UX Documentation</p>
+            <p>This comprehensive interface guide provides the foundation for a consistent, engaging, and intuitive game experience across all platforms.</p>
+        </footer>
+    </div>
+</body>
+</html><p>Design Note: Use the game's color scheme of blue gradients (#0D47A1 to #1A237E) with accent colors like #FFC107 for buttons. Ensure this screen is visually impressive to hook new users.</p>
+                </div>
+                <div class="responsive-notes">
+                    <p>Responsive Design: On mobile, stack login options vertically. On desktop, maintain a wider layout with side-by-side elements.</p>
+                </div>
+            </div>
+            
+            <div class="interface-item">
+                <h3>1.2 Registration Screen</h3>
+                <div class="interface-description">
+                    <p>Account creation screen for new users with all necessary fields and options.</p>
+                </div>
+                <div class="interface-elements">
+                    <h4>UI Elements:</h4>
+                    <ul class="element-list">
+                        <li>Username field</li>
+                        <li>Email field</li>
+                        <li>Password field with strength indicator</li>
+                        <li>Confirm password field</li>
+                        <li>Date of birth selector (for age verification)</li>
+                        <li>Terms and Conditions checkbox</li>
+                        <li>Create Account button</li>
+                        <li>Return to Login link</li>
+                    </ul>
+                </div>
+                <div class="design-notes">
+                    <p>Design Note: Keep the form clean and uncluttered. Use progress indicators to show completion stages if registration is multi-step.</p>
+                </div>
+            </div>
+            
+            <div class="interface-item">
+                <h3>1.3 Tutorial Screens</h3>
+                <div class="interface-description">
+                    <p>Interactive tutorial to introduce new players to the game mechanics, rules, and interface.</p>
+                </div>
+                <div class="interface-elements">
+                    <h4>UI Elements:</h4>
+                    <ul class="element-list">
+                        <li>Step-by-step interactive guide (5-7 steps)</li>
+                        <li>Visual demonstrations of gameplay mechanics</li>
+                        <li>Animated examples of movement patterns for different player positions</li>
+                        <li>Card types explanation with visual examples</li>
+                        <li>Next/Previous navigation buttons</li>
+                        <li>Skip Tutorial option</li>
+                        <li>Progress indicator</li>
+                    </ul>
+                </div>
+                <div class="design-notes">
+                    <p>Design Note: Use highlighting and animation to draw attention to specific UI elements being explained. Implement interactive elements to increase engagement.</p>
+                </div>
+            </div>
+        </section>
+        
+        <section class="interface-group">
+            <h2>2. Main Navigation Screens</h2>
+            
+            <div class="interface-item">
+                <h3>2.1 Home Screen / Dashboard</h3>
+                <div class="interface-description">
+                    <p>The central hub where players can access all game modes and features.</p>
+                </div>
+                <div class="interface-elements">
+                    <h4>UI Elements:</h4>
+                    <ul class="element-list">
+                        <li>User profile summary (avatar, username, rank)</li>
+                        <li>Currency display (coins, gems)</li>
+                        <li>Main navigation tabs (Play, Collection, Store, Social, Settings)</li>
+                        <li>Quick match button</li>
+                        <li>Featured tournament cards/banners</li>
+                        <li>Daily rewards/challenges section</li>
+                        <li>News and updates section</li>
+                        <li>Friends activity feed</li>
+                    </ul>
+                </div>
+                <div class="design-notes">
+                    <p>Design Note: The dashboard should feel dynamic with subtle animations and clearly defined sections. Use card-based UI for different sections to create visual hierarchy.</p>
+                </div>
+            </div>
+            
+            <div class="interface-item">
+                <h3>2.2 Play Mode Selection Screen</h3>
+                <div class="interface-description">
+                    <p>Screen where players select the type of match they want to play.</p>
+                </div>
+                <div class="interface-elements">
+                    <h4>UI Elements:</h4>
+                    <ul class="element-list">
+                        <li>Quick Match button</li>
+                        <li>Ranked Match option</li>
+                        <li>Tournament Mode</li>
+                        <li>Season Mode</li>
+                        <li>Practice Mode</li>
+                        <li>Friend Challenge</li>
+                        <li>AI Difficulty selection (Easy, Medium, Hard, Expert)</li>
+                        <li>Match settings options (time limits, field conditions)</li>
+                    </ul>
+                </div>
+                <div class="design-notes">
+                    <p>Design Note: Use vibrant, distinct visuals for each game mode to make them easily distinguishable. Include brief descriptions of each mode.</p>
+                </div>
+            </div>
+            
+            <div class="interface-item">
+                <h3>2.3 Card Collection Screen</h3>
+                <div class="interface-description">
+                    <p>Interface for viewing, organizing, and customizing player cards.</p>
+                </div>
+                <div class="interface-elements">
+                    <h4>UI Elements:</h4>
+                    <ul class="element-list">
+                        <li>Card gallery with filtering options (position, rating, team, etc.)</li>
+                        <li>Search functionality</li>
+                        <li>Sort options (alphabetical, rating, acquisition date)</li>
+                        <li>Team formation editor</li>
+                        <li>Card details expandable view</li>
+                        <li>Card upgrade interface</li>
+                        <li>Custom player creation section</li>
+                        <li>Collection statistics (cards owned, collection completion %)</li>
+                    </ul>
+                </div>
+                <div class="design-notes">
+                    <p>Design Note: The collection should feel premium with card animations and special effects for rare cards. Implement smooth transitions when viewing card details.</p>
+                </div>
+            </div>
+            
+            <div class="interface-item">
+                <h3>2.4 Store Screen</h3>
+                <div class="interface-description">
+                    <p>Marketplace interface for purchasing card packs, currency, and special items.</p>
+                </div>
+                <div class="interface-elements">
+                    <h4>UI Elements:</h4>
+                    <ul class="element-list">
+                        <li>Featured offers section</li>
+                        <li>Card pack options with different tiers</li>
+                        <li>Premium currency purchase options</li>
+                        <li>Season Pass section</li>
+                        <li>Special offers and limited-time deals</li>
+                        <li>Purchase history</li>
+                        <li>Preview functionality for card packs</li>
+                        <li>Currency balance display</li>
+                    </ul>
+                </div>
+                <div class="design-notes">
+                    <p>Design Note: Use premium visuals with slight animations to make items enticing. Clearly display value propositions for each purchase option.</p>
+                </div>
+            </div>
+        </section>
+        
+        <section class="interface-group">
+            <h2>3. Gameplay Screens</h2>
+            
+            <div class="interface-item">
+                <h3>3.1 Pre-Match Setup Screen</h3>
+                <div class="interface-description">
+                    <p>Interface for selecting team formation and players before a match begins.</p>
+                </div>
+                <div class="interface-elements">
+                    <h4>UI Elements:</h4>
+                    <ul class="element-list">
+                        <li>Formation selection (4-3-3, 4-4-2, etc.)</li>
+                        <li>Interactive football pitch with player positions</li>
+                        <li>Player card selection interface</li>
+                        <li>Player statistics comparison</li>
+                        <li>Auto-select best lineup option</li>
+                        <li>Save formation as preset option</li>
+                        <li>Opponent information (in multiplayer matches)</li>
+                        <li>Ready/Start button</li>
+                    </ul>
+                </div>
+                <div class="design-notes">
+                    <p>Design Note: The formation editor should be highly interactive, allowing drag-and-drop of players onto positions. Show complementary positions highlighted when selecting players.</p>
+                </div>
+            </div>
+            
+            <div class="interface-item">
+                <h3>3.2 Main Gameplay Screen</h3>
+                <div class="interface-description">
+                    <p>The primary playing field where the actual gameplay takes place.</p>
+                </div>
+                <div class="interface-elements">
+                    <h4>UI Elements:</h4>
+                    <ul class="element-list">
+                        <li>Football pitch grid (20x10)</li>
+                        <li>Player cards positioned on the grid</li>
+                        <li>Ball position indicator</li>
+                        <li>Turn indicator</li>
+                        <li>Moves remaining counter</li>
+                        <li>Score display</li>
+                        <li>Timer display</li>
+                        <li>Card/Injury indicators</li>
+                        <li>Movement pattern visualization when selecting a player</li>
+                        <li>Action buttons (Pass, Shoot, End Turn)</li>
+                        <li>Game log of recent actions</li>
+                    </ul>
+                </div>
+                <div class="design-notes">
+                    <p>Design Note: The gameplay screen should be clean and intuitive. Use clear visual indicators for possible moves, possession, and special abilities. Implement subtle animations for player movements and actions.</p>
+                </div>
+                <div class="responsive-notes">
+                    <p>Responsive Design: On mobile, simplify the layout and make player cards smaller but expandable on tap. On desktop, show more detailed information at all times.</p>
+                </div>
+            </div>
+            
+            <div class="interface-item">
+                <h3>3.3 Player Card Detail Overlay</h3>
+                <div class="interface-description">
+                    <p>Detailed view of a selected player card during gameplay.</p>
+                </div>
+                <div class="interface-elements">
+                    <h4>UI Elements:</h4>
+                    <ul class="element-list">
+                        <li>Enlarged player card with full statistics</li>
+                        <li>Movement pattern visualization</li>
+                        <li>Special abilities list</li>
+                        <li>Current status indicators (injury, cards, fatigue)</li>
+                        <li>Performance statistics for the current match</li>
+                        <li>Possible actions from current position</li>
+                        <li>Close button</li>
+                    </ul>
+                </div>
+                <div class="design-notes">
+                    <p>Design Note: This overlay should be easily accessible but not intrusive to gameplay. Use a semi-transparent background to maintain awareness of the game state.</p>
+                </div>
+            </div>
+            
+            <div class="interface-item">
+                <h3>3.4 Match Events Screen</h3>
+                <div class="interface-description">
+                    <p>Interface showing special events during a match like goals, fouls, and injuries.</p>
+                </div>
+                <div class="interface-elements">
+                    <h4>UI Elements:</h4>
+                    <ul class="element-list">
+                        <li>Animated event visualizations (goal celebrations, fouls)</li>
+                        <li>Event description text</li>
+                        <li>Player involved information</li>
+                        <li>Statistical impact display</li>
+                        <li>Continue button</li>
+                    </ul>
+                </div>
+                <div class="design-notes">
+                    <p>Design Note: These event screens should be exciting and cinematic for goals, but quick to display for minor events. Use appropriate sound effects to enhance the experience.</p>
+                </div>
+            </div>
+            
+            <div class="interface-item">
+                <h3>3.5 Pause Menu Screen</h3>
+                <div class="interface-description">
+                    <p>Menu accessed during gameplay to adjust settings or exit the match.</p>
+                </div>
+                <div class="interface-elements">
+                    <h4>UI Elements:</h4>
+                    <ul class="element-list">
+                        <li>Resume Game button</li>
+                        <li>Match Statistics</li>
+                        <li>Game Settings (sound, effects, display options)</li>
+                        <li>Forfeit Match option</li>
+                        <li>Rules Reference</li>
+                        <li>Report Issue option</li>
+                    </ul>
+                </div>
+                <div class="design-notes">
+                    <p>Design Note: The pause menu should partially obscure the game board but keep it visible in the background. Use a modal dialog approach.</p>
+                </div>
+            </div>
+        </section>
+        
+        <section class="interface-group">
+            <h2>4. Post-Match Screens</h2>
+            
+            <div class="interface-item">
+                <h3>4.1 Match Results Screen</h3>
+                <div class="interface-description">
+                    <p>Summary of the match results and key statistics.</p>
+                </div>
+                <div class="interface-elements">
+                    <h4>UI Elements:</h4>
+                    <ul class="element-list">
+                        <li>Final score display</li>
+                        <li>Team comparison statistics</li>
+                        <li>Player performance ratings</li>
+                        <li>Notable events timeline</li>
+                        <li>XP and rewards earned</li>
+                        <li>Rank changes (for ranked matches)</li>
+                        <li>Rematch button</li>
+                        <li>Return to Main Menu button</li>
+                    </ul>
+                </div>
+                <div class="design-notes">
+                    <p>Design Note: Use animations to gradually reveal statistics and rewards. Highlight exceptional performances with special effects.</p>
+                </div>
+            </div>
+            
+            <div class="interface-item">
+                <h3>4.2 Rewards Screen</h3>
+                <div class="interface-description">
+                    <p>Display of rewards earned from the match, including currency, XP, and cards.</p>
+                </div>
+                <div class="interface-elements">
+                    <h4>UI Elements:</h4>
+                    <ul class="element-list">
+                        <li>Currency earned animation</li>
+                        <li>XP progress bar with level-up notification</li>
+                        <li>New cards acquired (if any)</li>
+                        <li>Card pack opening animation</li>
+                        <li>Season pass progress update</li>
+                        <li>Achievement unlocks</li>
+                        <li>Continue button</li>
+                    </ul>
+                </div>
+                <div class="design-notes">
+                    <p>Design Note: Make this screen rewarding and exciting with animations and sound effects. The card reveal process should be especially engaging for rare cards.</p>
+                </div>
+            </div>
+        </section>
+        
+        <section class="interface-group">
+            <h2>5. Social & Community Screens</h2>
+            
+            <div class="interface-item">
+                <h3>5.1 Friends List Screen</h3>
+                <div class="interface-description">
+                    <p>Interface for managing friends and social connections.</p>
+                </div>
+                <div class="interface-elements">
+                    <h4>UI Elements:</h4>
+                    <ul class="element-list">
+                        <li>Friends list with online status indicators</li>
+                        <li>Friend request management section</li>
+                        <li>Add Friend functionality</li>
+                        <li>Quick challenge buttons</li>
+                        <li>Recent matches with friends</li>
+                        <li>Friend ranking leaderboard</li>
+                        <li>Friend search functionality</li>
+                    </ul>
+                </div>
+                <div class="design-notes">
+                    <p>Design Note: Make the social features easily accessible. Include quick-action buttons for common interactions like challenging friends.</p>
+                </div>
+            </div>
+            
+            <div class="interface-item">
+                <h3>5.2 Leaderboards Screen</h3>
+                <div class="interface-description">
+                    <p>Rankings and statistics for players across different categories.</p>
+                </div>
+                <div class="interface-elements">
+                    <h4>UI Elements:</h4>
+                    <ul class="element-list">
+                        <li>Global rankings tab</li>
+                        <li>Regional rankings tab</li>
+                        <li>Friends rankings tab</li>
+                        <li>Different ranking categories (Overall, By Division, Weekly, etc.)</li>
+                        <li>Player profile preview on selection</li>
+                        <li>Personal rank indicator</li>
+                        <li>Reward tiers for rankings</li>
+                    </ul>
+                </div>
+                <div class="design-notes">
+                    <p>Design Note: Use clear visual hierarchy to display rankings. Highlight the user's own position prominently.</p>
+                </div>
+            </div>
+            
+            <div class="interface-item">
+                <h3>5.3 Tournament Browser Screen</h3>
+                <div class="interface-description">
+                    <p>Interface for browsing and joining available tournaments.</p>
+                </div>
+                <div class="interface-elements">
+                    <h4>UI Elements:</h4>
+                    <ul class="element-list">
+                        <li>Active tournaments list</li>
+                        <li>Upcoming tournaments calendar</li>
+                        <li>Tournament details expandable view</li>
+                        <li>Entry requirements and fees</li>
+                        <li>Prize information</li>
+                        <li>Registration/Join button</li>
+                        <li>Tournament history tab</li>
+                    </ul>
+                </div>
+                <div class="design-notes">
+                    <p>Design Note: Use premium visuals for high-stakes tournaments. Include clear timeframes and count-down timers for upcoming events.</p>
+                </div>
+            </div>
+        </section>
+        
+        <section class="interface-group">
+            <h2>6. Customization Screens</h2>
+            
+            <div class="interface-item">
+                <h3>6.1 Player Customization Screen</h3>
+                <div class="interface-description">
+                    <p>Interface for creating and customizing player cards with personal photos.</p>
+                </div>
+                <div class="interface-elements">
+                    <h4>UI Elements:</h4>
+                    <ul class="element-list">
+                        <li>Photo upload/camera access button</li>
+                        <li>Photo editor with cropping, filters, and effects</li>
+                        <li>Player name and number inputs</li>
+                        <li>Position selection dropdown</li>
+                        <li>Attribute point allocation sliders</li>
+                        <li>Movement pattern selection</li>
+                        <li>Card design template options</li>
+                        <li>Preview and Save buttons</li>
+                    </ul>
+                </div>
+                <div class="design-notes">
+                    <p>Design Note: The customization interface should be fun and intuitive. Show real-time previews of changes to the card.</p>
+                </div>
+                <div class="responsive-notes">
+                    <p>Responsive Design: On mobile, optimize the photo capture process using the device camera. On desktop, enhance the editing capabilities.</p>
+                </div>
+            </div>
+            
+            <div class="interface-item">
+                <h3>6.2 Team Customization Screen</h3>
+                <div class="interface-description">
+                    <p>Interface for customizing team appearance, formation, and tactics.</p>
+                </div>
+                <div class="interface-elements">
+                    <h4>UI Elements:</h4>
+                    <ul class="element-list">
+                        <li>Team name and abbreviation inputs</li>
+                        <li>Team logo editor</li>
+                        <li>Color scheme selector</li>
+                        <li>Home and away kit designer</li>
+                        <li>Default formation editor</li>
+                        <li>Playing style preferences</li>
+                        <li>Save multiple team presets option</li>
+                    </ul>
+                </div>
+                <div class="design-notes">
+                    <p>Design Note: Implement an intuitive color picker and pattern selector for team kits. Show preview of the team on the field with selected designs.</p>
+                </div>
+            </div>
+        </section>
+        
+        <section class="interface-group">
+            <h2>7. Settings & Profile Screens</h2>
+            
+            <div class="interface-item">
+                <h3>7.1 User Profile Screen</h3>
+                <div class="interface-description">
+                    <p>Detailed view of the user's profile, achievements, and statistics.</p>
+                </div>
+                <div class="interface-elements">
+                    <h4>UI Elements:</h4>
+                    <ul class="element-list">
+                        <li>Profile picture and username</li>
+                        <li>Rank and division display</li>
+                        <li>Statistics summary (wins, losses, draws)</li>
+                        <li>Match history</li>
+                        <li>Achievements showcase</li>
+                        <li>Collection completion progress</li>
+                        <li>Edit Profile button</li>
+                        <li>Share Profile option</li>
+                    </ul>
+                </div>
+                <div class="design-notes">
+                    <p>Design Note: Make achievements and statistics visually appealing with badges and graphs. Allow players to showcase their favorite achievements and cards.</p>
+                </div>
+            </div>
+            
+            <div class="interface-item">
+                <h3>7.2 Settings Screen</h3>
+                <div class="interface-description">
+                    <p>Interface for adjusting game settings and preferences.</p>
+                </div>
+                <div class="interface-elements">
+                    <h4>UI Elements:</h4>
+                    <ul class="element-list">
+                        <li>Audio settings (music, sound effects, voice)</li>
+                        <li>Graphics quality options</li>
+                        <li>Language selection</li>
+                        <li>Notification preferences</li>
+                        <li>Account settings</li>
+                        <li>Privacy controls</li>
+                        <li>Control options (touch, keyboard, controller)</li>
+                        <li>Accessibility options</li>
+                    </ul>
+                </div>
+                <div class="design-notes">
+                    <p>Design Note: Organize settings into logical categories with icons. Implement immediate feedback when settings are changed.</p>
+                </div>
+            </div>
+            
+            <div class="interface-item">
+                <h3>7.3 Help & Support Screen</h3>
+                <div class="interface-description">
+                    <p>Resources and options for getting help with the game.</p>
+                </div>
+                <div class="interface-elements">
+                    <h4>UI Elements:</h4>
+                    <ul class="element-list">
+                        <li>FAQ section</li>
+                        <li>Game rules and mechanics guide</li>
+                        <li>Video tutorials</li>
+                        <li>Contact support option</li>
+                        <li>Bug report form</li>
+                        <li>Community forum link</li>
+                        <li>Release notes and update history</li>
+                    </ul>
+                </div>
+                <div class="design-notes">
+                    <p>Design Note: Make help resources easily searchable. Include contextual help that's accessible from relevant screens.</p>
+                </div>
+            </div>
+        </section>
+        
+        <section class="interface-group">
+            <h2>8. Mobile-Specific Interfaces</h2>
+            
+            <div class="interface-item">
+                <h3>8.1 Mobile Navigation</h3>
+                <div class="interface-description">
+                    <p>Optimized navigation bar for mobile devices.</p>
+                </div>
+                <div class="interface-elements">
+                    <h4>UI Elements:</h4>
+                    <ul class="element-list">
+                        <li>Bottom tab bar with 5 main sections</li>
+                        <li>Simplified header with collapsible elements</li>
+                        <li>Swipe gestures for common actions</li>
+                        <li>Touch-optimized buttons (larger tap targets)</li>
+                        <li>Pull-to-refresh functionality</li>
+                    </ul>
+                </div>
+                <div class="design-notes">
+                    <p>Design Note: Ensure thumb-friendly design with important actions within easy reach. Use bottom navigation for main sections instead of hamburger menus.</p>
+                </div>
+            </div>
+            
+            <div class="interface-item">
+                <h3>8.2 Mobile Gameplay Controls</h3>
+                <div class="interface-description">
+                    <p>Touch-optimized controls for gameplay on mobile devices.</p>
+                </div>
+                <div class="interface-elements">
+                    <h4>UI Elements:</h4>
+                    <ul class="element-list">
+                        <li>Larger, touch-friendly player cards</li>
+                        <li>Tap to select, tap to move interaction pattern</li>
+                        <li>Swipe for quick actions (end turn, cancel)</li>
+                        <li>Pinch to zoom on board areas</li>
+                        <li>Simplified action buttons</li>
+                        <li>Auto-scroll to follow action</li>
+                    </ul>
+                </div>
+                <div class="design-notes">
+                    <p>Design Note: Ensure controls are accessible without obscuring the game board. Implement adaptive layouts for different screen sizes and orientations.</p>
+                </div>
+            </div>
+        </section>
+        
+        <section class="interface-group">
+            <h2>9. Desktop-Specific Interfaces</h2>
+            
+            <div class="interface-item">
+                <h3>9.1 Desktop Navigation</h3>
+                <div class="interface-description">
+                    <p>Enhanced navigation for desktop with additional information display.</p>
+                </div>
+                <div class="interface-elements">
+                    <h4>UI Elements:</h4>
+                    <ul class="element-list">
+                        <li>Side navigation bar with expandable sections</li>
+                        <li>Keyboard shortcuts for common actions</li>
+                        <li>Hover states with detailed tooltips</li>
+                        <li>Multi-panel layout for simultaneous information display</li>
+                        <li>Advanced filtering options</li>
+                    </ul>
+                </div>
+                <div class="design-notes">
+                    

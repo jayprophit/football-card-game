@@ -1,0 +1,311 @@
+const mongoose = require('mongoose');
+
+const PlayerCardSchema = new mongoose.Schema({
+  cardId: {
+    type: String,
+    required: true,
+    unique: true
+  },
+  name: {
+    type: String,
+    required: true,
+    trim: true
+  },
+  position: {
+    type: String,
+    required: true,
+    enum: ['GK', 'CB', 'LB', 'RB', 'CDM', 'CM', 'CAM', 'LM', 'RM', 'LW', 'RW', 'ST', 'CF'],
+  },
+  number: {
+    type: Number,
+    required: true,
+    min: 1,
+    max: 99
+  },
+  attributes: {
+    pace: {
+      type: Number,
+      required: true,
+      min: 1,
+      max: 99
+    },
+    shooting: {
+      type: Number,
+      required: true,
+      min: 1,
+      max: 99
+    },
+    passing: {
+      type: Number,
+      required: true,
+      min: 1,
+      max: 99
+    },
+    dribbling: {
+      type: Number,
+      required: true,
+      min: 1,
+      max: 99
+    },
+    defending: {
+      type: Number,
+      required: true,
+      min: 1,
+      max: 99
+    },
+    physical: {
+      type: Number,
+      required: true,
+      min: 1,
+      max: 99
+    }
+  },
+  team: {
+    type: String,
+    required: true
+  },
+  nationality: {
+    type: String,
+    required: true
+  },
+  rarity: {
+    type: String,
+    required: true,
+    enum: ['common', 'rare', 'epic', 'legendary']
+  },
+  overall: {
+    type: Number,
+    required: true,
+    min: 1,
+    max: 99
+  },
+  specialAbilities: {
+    type: [String],
+    default: []
+  },
+  image: {
+    type: String,
+    default: null
+  },
+  isCustom: {
+    type: Boolean,
+    default: false
+  },
+  creator: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'User',
+    default: null
+  },
+  createdAt: {
+    type: Date,
+    default: Date.now
+  }
+});
+
+// Calculate overall rating based on attributes and position
+PlayerCardSchema.methods.calculateOverall = function() {
+  const { pace, shooting, passing, dribbling, defending, physical } = this.attributes;
+  const position = this.position;
+  
+  // Position-specific weights
+  const weights = {
+    GK: { pace: 0.2, shooting: 0, passing: 0.2, dribbling: 0.1, defending: 0.8, physical: 0.7 },
+    CB: { pace: 0.3, shooting: 0.1, passing: 0.3, dribbling: 0.2, defending: 0.9, physical: 0.8 },
+    LB: { pace: 0.7, shooting: 0.2, passing: 0.5, dribbling: 0.5, defending: 0.7, physical: 0.6 },
+    RB: { pace: 0.7, shooting: 0.2, passing: 0.5, dribbling: 0.5, defending: 0.7, physical: 0.6 },
+    CDM: { pace: 0.5, shooting: 0.3, passing: 0.7, dribbling: 0.5, defending: 0.8, physical: 0.7 },
+    CM: { pace: 0.5, shooting: 0.5, passing: 0.9, dribbling: 0.7, defending: 0.5, physical: 0.6 },
+    CAM: { pace: 0.6, shooting: 0.7, passing: 0.9, dribbling: 0.8, defending: 0.3, physical: 0.5 },
+    LM: { pace: 0.8, shooting: 0.5, passing: 0.7, dribbling: 0.7, defending: 0.4, physical: 0.5 },
+    RM: { pace: 0.8, shooting: 0.5, passing: 0.7, dribbling: 0.7, defending: 0.4, physical: 0.5 },
+    LW: { pace: 0.9, shooting: 0.8, passing: 0.6, dribbling: 0.9, defending: 0.2, physical: 0.5 },
+    RW: { pace: 0.9, shooting: 0.8, passing: 0.6, dribbling: 0.9, defending: 0.2, physical: 0.5 },
+    ST: { pace: 0.8, shooting: 0.9, passing: 0.4, dribbling: 0.7, defending: 0.1, physical: 0.8 },
+    CF: { pace: 0.7, shooting: 0.8, passing: 0.6, dribbling: 0.8, defending: 0.2, physical: 0.7 }
+  };
+  
+  const posWeights = weights[position] || weights.CM; // Default to CM weights if position not found
+  
+  // Calculate weighted average
+  const weightedSum = 
+    pace * posWeights.pace +
+    shooting * posWeights.shooting +
+    passing * posWeights.passing +
+    dribbling * posWeights.dribbling +
+    defending * posWeights.defending +
+    physical * posWeights.physical;
+  
+  const weightTotal = Object.values(posWeights).reduce((sum, weight) => sum + weight, 0);
+  
+  // Round to nearest integer
+  return Math.round(weightedSum / weightTotal);
+};
+
+// Get movement type based on position (chess-like movement)
+PlayerCardSchema.methods.getMovementType = function() {
+  const movementTypes = {
+    GK: 'king',    // 1 square in any direction
+    CB: 'rook',    // Horizontal and vertical
+    LB: 'bishop',  // Diagonal with special horizontal move
+    RB: 'bishop',  // Diagonal with special horizontal move
+    CDM: 'knight', // L-shape movement
+    CM: 'queen',   // Any direction (limited range)
+    CAM: 'queen',  // Any direction (limited range)
+    LM: 'knight',  // L-shape with special horizontal move
+    RM: 'knight',  // L-shape with special horizontal move
+    LW: 'knight',  // L-shape with special horizontal move
+    RW: 'knight',  // L-shape with special horizontal move
+    ST: 'rook',    // Horizontal and vertical with extended range
+    CF: 'rook'     // Horizontal and vertical with extended range
+  };
+  
+  return movementTypes[this.position] || 'queen';
+};
+
+// Get movement range based on position and attributes
+PlayerCardSchema.methods.getMovementRange = function() {
+  const baseRanges = {
+    GK: 1,
+    CB: 3,
+    LB: 3,
+    RB: 3,
+    CDM: 1, // Knight moves are L-shaped, so range is fixed
+    CM: 2,
+    CAM: 3,
+    LM: 1, // Knight moves are L-shaped, so range is fixed
+    RM: 1, // Knight moves are L-shaped, so range is fixed
+    LW: 1, // Knight moves are L-shaped, so range is fixed
+    RW: 1, // Knight moves are L-shaped, so range is fixed
+    ST: 4,
+    CF: 4
+  };
+  
+  // Pace can provide bonus to range for some positions
+  let paceBonus = 0;
+  
+  if (this.attributes.pace >= 90) paceBonus = 1;
+  else if (this.attributes.pace >= 80) paceBonus = 0.5;
+  
+  // Only apply pace bonus to certain positions
+  const paceBonusPositions = ['LB', 'RB', 'LW', 'RW', 'ST'];
+  if (paceBonusPositions.includes(this.position)) {
+    return baseRanges[this.position] + paceBonus;
+  }
+  
+  return baseRanges[this.position] || 2;
+};
+
+// Get special abilities description
+PlayerCardSchema.methods.getAbilitiesDescription = function() {
+  const descriptions = {};
+  
+  this.specialAbilities.forEach(ability => {
+    switch (ability) {
+      case 'Goalkeeper Reflexes':
+        descriptions[ability] = 'Improved chance of saving shots from close range';
+        break;
+      case 'Long Throw':
+        descriptions[ability] = 'Can throw the ball further, improving distribution';
+        break;
+      case 'Leader':
+        descriptions[ability] = 'Improves defensive positioning of nearby teammates';
+        break;
+      case 'Aerial Duels':
+        descriptions[ability] = 'Better chance of winning headers from crosses and corners';
+        break;
+      case 'Playmaker':
+        descriptions[ability] = 'Improved passing accuracy and vision';
+        break;
+      case 'Long Shots':
+        descriptions[ability] = 'Increased chance of scoring from distance';
+        break;
+      case 'Through Balls':
+        descriptions[ability] = 'Better at creating chances with precise through passes';
+        break;
+      case 'Finisher':
+        descriptions[ability] = 'Higher conversion rate in the penalty area';
+        break;
+      case 'Power Header':
+        descriptions[ability] = 'More powerful and accurate headers';
+        break;
+      case 'Speed Dribbler':
+        descriptions[ability] = 'Maintains control while dribbling at high speed';
+        break;
+      case 'Dribbler':
+        descriptions[ability] = 'Improved ball control when changing direction';
+        break;
+      case 'Free Kick Specialist':
+        descriptions[ability] = 'Higher chance of scoring from free kicks';
+        break;
+      case 'Magician':
+        descriptions[ability] = 'Can perform special skill moves to evade defenders';
+        break;
+      case 'Tackler':
+        descriptions[ability] = 'Better chance of winning tackles cleanly';
+        break;
+      case 'Distributor':
+        descriptions[ability] = 'Improved passing range from defensive positions';
+        break;
+      case 'Speedster':
+        descriptions[ability] = 'Exceptionally fast, can outrun most defenders';
+        break;
+      case 'Clinical Finisher':
+        descriptions[ability] = 'Very high chance of scoring when one-on-one with goalkeeper';
+        break;
+      case 'Crosser':
+        descriptions[ability] = 'More accurate crosses from wide positions';
+        break;
+      case 'Ball Winner':
+        descriptions[ability] = 'Excellent at intercepting passes and winning possession';
+        break;
+      case 'Tireless Runner':
+        descriptions[ability] = 'Can maintain performance throughout the match';
+        break;
+      case 'Box to Box':
+        descriptions[ability] = 'Effective in both attack and defense across the pitch';
+        break;
+      case 'Complete Midfielder':
+        descriptions[ability] = 'Balanced in all midfield attributes';
+        break;
+      case 'Shot Stopper':
+        descriptions[ability] = 'Excellent at saving powerful shots';
+        break;
+      case 'Sweeper Keeper':
+        descriptions[ability] = 'Good at coming off the line to clear danger';
+        break;
+      case 'Inside Forward':
+        descriptions[ability] = 'Cuts inside from wide positions for shooting opportunities';
+        break;
+      case 'Winger':
+        descriptions[ability] = 'Excels at beating defenders on the wing';
+        break;
+      case 'Passing':
+        descriptions[ability] = 'Exceptional passing ability in all situations';
+        break;
+      case 'Flair':
+        descriptions[ability] = 'Creative with unexpected moves to surprise opponents';
+        break;
+      case 'Vision':
+        descriptions[ability] = 'Can spot and execute passes that others miss';
+        break;
+      case 'Set Pieces':
+        descriptions[ability] = 'Expert at all set piece situations';
+        break;
+      case 'Positioning':
+        descriptions[ability] = 'Always in the right position defensively';
+        break;
+      case 'Versatile':
+        descriptions[ability] = 'Can play effectively in multiple positions';
+        break;
+      case 'Tactician':
+        descriptions[ability] = 'Understands and executes tactical instructions perfectly';
+        break;
+      default:
+        descriptions[ability] = 'Special ability that enhances player performance';
+    }
+  });
+  
+  return descriptions;
+};
+
+module.exports = mongoose.model('PlayerCard', PlayerCardSchema);

@@ -1,0 +1,43 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 500 200">
+  <!-- Background -->
+  <rect width="500" height="200" rx="20" fill="#2e7d32"/>
+  
+  <!-- Card design (left) -->
+  <g transform="translate(50, 40)">
+    <rect width="100" height="140" rx="5" fill="#ffffff" stroke="#000000" stroke-width="2"/>
+    <rect x="10" y="10" width="80" height="100" fill="#4caf50"/>
+    
+    <!-- Field lines -->
+    <rect x="10" y="60" width="80" height="1" fill="#ffffff" stroke-width="0"/>
+    <circle cx="50" cy="60" r="10" stroke="#ffffff" stroke-width="1" fill="none"/>
+    <rect x="40" y="10" width="1" height="100" fill="#ffffff" stroke-width="0"/>
+    
+    <!-- Player silhouette -->
+    <circle cx="50" cy="30" r="10" fill="#333333"/>
+    <path d="M40 45 L60 45 L55 70 L45 70 Z" fill="#333333"/>
+    <path d="M45 70 L40 90 M55 70 L60 90" stroke="#333333" stroke-width="4" stroke-linecap="round"/>
+    
+    <!-- Chesss piece overlay -->
+    <path d="M70 25 L75 20 L80 25 L75 30 Z" fill="#d32f2f" stroke="#000000" stroke-width="1"/>
+  </g>
+  
+  <!-- Text "FOOTBALL" -->
+  <text x="170" y="90" font-family="Arial, sans-serif" font-size="48" font-weight="bold" fill="#ffffff">FOOTBALL</text>
+  
+  <!-- Text "CARD GAME" -->
+  <text x="200" y="140" font-family="Arial, sans-serif" font-size="36" font-weight="bold" fill="#ffffff">CARD GAME</text>
+  
+  <!-- Chess piece (right) -->
+  <g transform="translate(400, 60)">
+    <path d="M20 0 L40 0 L30 50 L20 50 Z" fill="#d32f2f" stroke="#000000" stroke-width="2"/>
+    <ellipse cx="30" cy="60" rx="15" ry="5" fill="#d32f2f" stroke="#000000" stroke-width="2"/>
+    <rect x="25" y="60" width="10" height="20" fill="#d32f2f" stroke="#000000" stroke-width="2"/>
+    <ellipse cx="30" cy="80" rx="20" ry="7" fill="#d32f2f" stroke="#000000" stroke-width="2"/>
+  </g>
+  
+  <!-- Football -->
+  <circle cx="130" cy="170" r="20" fill="#ffffff" stroke="#000000" stroke-width="2"/>
+  <path d="M115 160 L145 180 M115 180 L145 160" stroke="#000000" stroke-width="2"/>
+  <path d="M130 150 L130 190" stroke="#000000" stroke-width="2"/>
+  <path d="M110 170 L150 170" stroke="#000000" stroke-width="2"/>
+</svg>

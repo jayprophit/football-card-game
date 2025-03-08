@@ -1,0 +1,127 @@
+import React, { useState, useEffect } from 'react';
+import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
+
+// Components
+import Navbar from './components/Navbar';
+
+// Pages
+import HomePage from './pages/HomePage';
+import GamePage from './pages/GamePage';
+import CollectionPage from './pages/CollectionPage';
+import StorePage from './pages/StorePage';
+import MatchmakingPage from './pages/MatchmakingPage';
+import ProfilePage from './pages/ProfilePage';
+
+// Styles
+import './styles/global.css';
+
+// Placeholder for authentication context
+const AuthContext = React.createContext(null);
+
+const App = () => {
+  const [user, setUser] = useState(null);
+  const [loading, setLoading] = useState(true);
+  const [notification, setNotification] = useState(null);
+
+  // Simulate user login/auth check
+  useEffect(() => {
+    // This would be an API call to check authentication status
+    setTimeout(() => {
+      setUser({
+        id: 'u001',
+        username: 'FootballChessMaster',
+        coins: 2450,
+        gems: 185,
+        experience: 2750,
+        level: 24,
+        joinDate: '2023-02-15',
+        avatar: '/images/default-avatar.png',
+        elo: 1245,
+        rank: 'Silver II'
+      });
+      setLoading(false);
+    }, 1000);
+  }, []);
+
+  // Show notification
+  const showNotification = (message, type = 'info') => {
+    setNotification({ message, type });
+    
+    // Auto-dismiss after 5 seconds
+    setTimeout(() => {
+      setNotification(null);
+    }, 5000);
+  };
+
+  // Simulated logout function
+  const logout = () => {
+    setUser(null);
+    showNotification('Successfully logged out!', 'success');
+  };
+
+  // Auth context value
+  const authValue = {
+    user,
+    login: (userData) => setUser(userData),
+    logout,
+    loading
+  };
+
+  if (loading) {
+    return (
+      <div className="loading-screen">
+        <div className="spinner"></div>
+        <p>Loading FootballChess...</p>
+      </div>
+    );
+  }
+
+  return (
+    <AuthContext.Provider value={authValue}>
+      <Router>
+        <div className="app-container">
+          <Navbar user={user} onLogout={logout} />
+          
+          {notification && (
+            <div className={`notification ${notification.type}`}>
+              {notification.message}
+              <button 
+                className="notification-close"
+                onClick={() => setNotification(null)}
+              >
+                &times;
+              </button>
+            </div>
+          )}
+          
+          <main className="main-content">
+            <Routes>
+              <Route path="/" element={<HomePage showNotification={showNotification} />} />
+              <Route path="/play" element={user ? <GamePage /> : <Navigate to="/" />} />
+              <Route path="/collection" element={user ? <CollectionPage /> : <Navigate to="/" />} />
+              <Route path="/store" element={<StorePage showNotification={showNotification} />} />
+              <Route path="/matchmaking" element={user ? <MatchmakingPage /> : <Navigate to="/" />} />
+              <Route path="/profile" element={user ? <ProfilePage user={user} /> : <Navigate to="/" />} />
+              <Route path="*" element={<Navigate to="/" />} />
+            </Routes>
+          </main>
+          
+          <footer className="app-footer">
+            <div className="container">
+              <p>&copy; {new Date().getFullYear()} FootballChess. All rights reserved.</p>
+              <div className="footer-links">
+                <a href="/privacy">Privacy Policy</a>
+                <a href="/terms">Terms of Service</a>
+                <a href="/support">Support</a>
+              </div>
+            </div>
+          </footer>
+        </div>
+      </Router>
+    </AuthContext.Provider>
+  );
+};
+
+// Export context for use in other components
+export { AuthContext };
+export default App;

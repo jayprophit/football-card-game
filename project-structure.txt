@@ -1,0 +1,41 @@
+# Football Card Game Project Structure
+
+```
+/
+├── public/                  # Public static assets
+│   ├── index.html           # Main HTML entry point
+│   ├── favicon.ico          # Website favicon
+│   ├── manifest.json        # Web app manifest
+│   ├── robots.txt           # Robots crawling instructions
+│   ├── images/              # Game images directory
+│   │   ├── cards/           # Card images
+│   │   ├── fields/          # Football pitch graphics
+│   │   ├── teams/           # Team logos and colors
+│   │   └── ui/              # UI elements
+│   └── sounds/              # Game sound effects
+│
+├── private/                 # Testing and development assets
+│   ├── testData/            # Test data generation
+│   │   ├── playerGenerator.js   # Script to generate test players
+│   │   ├── teamGenerator.js     # Script to generate test teams
+│   │   └── mockMatches.js       # Mock match data
+│   ├── devTools/            # Developer tools
+│   │   ├── debugConsole.js      # Debug console
+│   │   └── performanceMonitor.js # Performance monitoring tools
+│   └── testingAccess.js     # Unlimited access control for testing
+│
+├── src/                     # Source code
+│   ├── index.tsx            # Application entry point
+│   ├── components/          # React components
+│   ├── models/              # Game data models 
+│   ├── logic/               # Game logic
+│   │   ├── engine/          # Core game engine
+│   │   ├── rules/           # Game rules implementation
+│   │   └── ai/              # AI opponent logic
+│   ├── styles/              # Styling
+│   └── utils/               # Utility functions
+│
+├── package.json            # Project dependencies
+├── tsconfig.json           # TypeScript configuration
+└── README.md               # Project documentation
+```

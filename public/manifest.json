@@ -1,0 +1,27 @@
+{
+  "short_name": "Football Cards",
+  "name": "Football Card Game",
+  "icons": [
+    {
+      "src": "favicon.ico",
+      "sizes": "64x64 32x32 24x24 16x16",
+      "type": "image/x-icon"
+    },
+    {
+      "src": "images/ui/logo192.png",
+      "type": "image/png",
+      "sizes": "192x192"
+    },
+    {
+      "src": "images/ui/logo512.png",
+      "type": "image/png",
+      "sizes": "512x512"
+    }
+  ],
+  "start_url": ".",
+  "display": "standalone",
+  "theme_color": "#4caf50",
+  "background_color": "#ffffff",
+  "orientation": "landscape",
+  "description": "A strategic football card game with chess-like movements and realistic football mechanics"
+}

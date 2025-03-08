@@ -1,0 +1,878 @@
+-- FootballChess Database Schema
+-- Complete database structure for the game with user management, cards, matches, and blockchain integration
+
+-- Users and Authentication
+CREATE TABLE users (
+  user_id UUID PRIMARY KEY,
+  username VARCHAR(50) UNIQUE NOT NULL,
+  email VARCHAR(100) UNIQUE NOT NULL,
+  password_hash VARCHAR(255) NOT NULL,
+  date_of_birth DATE NOT NULL,
+  age INT NOT NULL,
+  is_underage BOOLEAN NOT NULL,
+  created_at TIMESTAMP NOT NULL DEFAULT NOW(),
+  last_login TIMESTAMP,
+  country_code VARCHAR(3),
+  language_code VARCHAR(5),
+  is_active BOOLEAN DEFAULT TRUE
+);
+
+CREATE TABLE user_profiles (
+  profile_id UUID PRIMARY KEY,
+  user_id UUID REFERENCES users(user_id) ON DELETE CASCADE,
+  display_name VARCHAR(50),
+  avatar_url TEXT,
+  bio TEXT,
+  favorite_team VARCHAR(100),
+  preferred_formation VARCHAR(20),
+  total_matches INT DEFAULT 0,
+  wins INT DEFAULT 0,
+  draws INT DEFAULT 0,
+  losses INT DEFAULT 0,
+  created_at TIMESTAMP NOT NULL DEFAULT NOW(),
+  updated_at TIMESTAMP NOT NULL DEFAULT NOW()
+);
+
+CREATE TABLE user_sessions (
+  session_id UUID PRIMARY KEY,
+  user_id UUID REFERENCES users(user_id) ON DELETE CASCADE,
+  token VARCHAR(255) NOT NULL,
+  ip_address VARCHAR(45),
+  user_agent TEXT,
+  is_valid BOOLEAN DEFAULT TRUE,
+  created_at TIMESTAMP NOT NULL DEFAULT NOW(),
+  expires_at TIMESTAMP NOT NULL
+);
+
+-- Age Verification and KYC
+CREATE TABLE age_verification (
+  verification_id UUID PRIMARY KEY,
+  user_id UUID REFERENCES users(user_id) ON DELETE CASCADE,
+  date_of_birth DATE NOT NULL,
+  age INT NOT NULL,
+  is_underage BOOLEAN NOT NULL,
+  verified BOOLEAN DEFAULT FALSE,
+  verification_method VARCHAR(50),
+  verification_date TIMESTAMP,
+  unlock_date TIMESTAMP,
+  created_at TIMESTAMP NOT NULL DEFAULT NOW(),
+  updated_at TIMESTAMP NOT NULL DEFAULT NOW()
+);
+
+CREATE TABLE kyc_requests (
+  request_id UUID PRIMARY KEY,
+  user_id UUID REFERENCES users(user_id) ON DELETE CASCADE,
+  status VARCHAR(20) NOT NULL,
+  submitted_at TIMESTAMP NOT NULL DEFAULT NOW(),
+  processed_at TIMESTAMP,
+  rejection_reason TEXT,
+  documents_count INT NOT NULL
+);
+
+CREATE TABLE kyc_documents (
+  document_id UUID PRIMARY KEY,
+  request_id UUID REFERENCES kyc_requests(request_id) ON DELETE CASCADE,
+  document_type VARCHAR(50) NOT NULL,
+  document_hash VARCHAR(255) NOT NULL,
+  storage_path TEXT,
+  uploaded_at TIMESTAMP NOT NULL DEFAULT NOW()
+);
+
+-- Card System
+CREATE TABLE card_templates (
+  template_id VARCHAR(50) PRIMARY KEY,
+  position VARCHAR(20) NOT NULL,
+  movement_type VARCHAR(20) NOT NULL,
+  base_rating INT NOT NULL,
+  rarity VARCHAR(20) NOT NULL,
+  image_url TEXT,
+  created_at TIMESTAMP NOT NULL DEFAULT NOW()
+);
+
+CREATE TABLE player_cards (
+  card_id UUID PRIMARY KEY,
+  template_id VARCHAR(50) REFERENCES card_templates(template_id),
+  position VARCHAR(20) NOT NULL,
+  rating INT NOT NULL,
+  number INT NOT NULL,
+  movement_type VARCHAR(20) NOT NULL,
+  speed INT NOT NULL,
+  passing INT NOT NULL,
+  shooting INT NOT NULL,
+  defending INT NOT NULL,
+  durability INT NOT NULL,
+  is_legendary BOOLEAN DEFAULT FALSE,
+  created_at TIMESTAMP NOT NULL DEFAULT NOW()
+);
+
+CREATE TABLE user_cards (
+  user_card_id UUID PRIMARY KEY,
+  user_id UUID REFERENCES users(user_id) ON DELETE CASCADE,
+  card_id UUID REFERENCES player_cards(card_id) ON DELETE CASCADE,
+  experience INT DEFAULT 0,
+  matches_played INT DEFAULT 0,
+  nft_token_id VARCHAR(100),
+  is_in_team BOOLEAN DEFAULT FALSE,
+  acquired_at TIMESTAMP NOT NULL DEFAULT NOW(),
+  nft_status VARCHAR(20) DEFAULT 'not_minted',
+  last_upgraded_at TIMESTAMP
+);
+
+CREATE TABLE custom_cards (
+  custom_card_id UUID PRIMARY KEY,
+  user_id UUID REFERENCES users(user_id) ON DELETE CASCADE,
+  card_id UUID REFERENCES player_cards(card_id) ON DELETE CASCADE,
+  original_image_url TEXT,
+  processed_image_url TEXT,
+  created_at TIMESTAMP NOT NULL DEFAULT NOW()
+);
+
+CREATE TABLE card_packs (
+  pack_id UUID PRIMARY KEY,
+  name VARCHAR(100) NOT NULL,
+  description TEXT,
+  price DECIMAL(10,2) NOT NULL,
+  cards_count INT NOT NULL,
+  rarity_distribution JSONB,
+  is_available BOOLEAN DEFAULT TRUE,
+  created_at TIMESTAMP NOT NULL DEFAULT NOW()
+);
+
+CREATE TABLE user_pack_purchases (
+  purchase_id UUID PRIMARY KEY,
+  user_id UUID REFERENCES users(user_id) ON DELETE CASCADE,
+  pack_id UUID REFERENCES card_packs(pack_id) ON DELETE CASCADE,
+  payment_id UUID,
+  purchase_date TIMESTAMP NOT NULL DEFAULT NOW(),
+  opened BOOLEAN DEFAULT FALSE,
+  opened_at TIMESTAMP
+);
+
+-- Team System
+CREATE TABLE teams (
+  team_id UUID PRIMARY KEY,
+  user_id UUID REFERENCES users(user_id) ON DELETE CASCADE,
+  name VARCHAR(100) NOT NULL,
+  formation VARCHAR(20) NOT NULL,
+  primary_color VARCHAR(7),
+  secondary_color VARCHAR(7),
+  logo_url TEXT,
+  rating INT,
+  created_at TIMESTAMP NOT NULL DEFAULT NOW(),
+  updated_at TIMESTAMP NOT NULL DEFAULT NOW()
+);
+
+CREATE TABLE team_cards (
+  team_id UUID REFERENCES teams(team_id) ON DELETE CASCADE,
+  user_card_id UUID REFERENCES user_cards(user_card_id) ON DELETE CASCADE,
+  position_index INT NOT NULL,
+  PRIMARY KEY (team_id, user_card_id)
+);
+
+CREATE TABLE formations (
+  formation_id VARCHAR(20) PRIMARY KEY,
+  name VARCHAR(50) NOT NULL,
+  description TEXT,
+  positions JSONB NOT NULL
+);
+
+-- Match System
+CREATE TABLE matches (
+  match_id UUID PRIMARY KEY,
+  home_team_id UUID REFERENCES teams(team_id) ON DELETE SET NULL,
+  away_team_id UUID REFERENCES teams(team_id) ON DELETE SET NULL,
+  home_score INT DEFAULT 0,
+  away_score INT DEFAULT 0,
+  status VARCHAR(20) NOT NULL,
+  turn_count INT DEFAULT 0,
+  current_turn VARCHAR(20),
+  tournament_id UUID,
+  created_at TIMESTAMP NOT NULL DEFAULT NOW(),
+  started_at TIMESTAMP,
+  ended_at TIMESTAMP,
+  match_data JSONB
+);
+
+CREATE TABLE match_events (
+  event_id UUID PRIMARY KEY,
+  match_id UUID REFERENCES matches(match_id) ON DELETE CASCADE,
+  event_type VARCHAR(20) NOT NULL,
+  player_card_id UUID,
+  position_x INT,
+  position_y INT,
+  target_x INT,
+  target_y INT,
+  timestamp TIMESTAMP NOT NULL DEFAULT NOW(),
+  event_data JSONB
+);
+
+CREATE TABLE match_moves (
+  move_id UUID PRIMARY KEY,
+  match_id UUID REFERENCES matches(match_id) ON DELETE CASCADE,
+  user_id UUID REFERENCES users(user_id) ON DELETE CASCADE,
+  card_id UUID,
+  from_x INT NOT NULL,
+  from_y INT NOT NULL,
+  to_x INT NOT NULL,
+  to_y INT NOT NULL,
+  turn_number INT NOT NULL,
+  move_index INT NOT NULL,
+  has_ball BOOLEAN DEFAULT FALSE,
+  created_at TIMESTAMP NOT NULL DEFAULT NOW()
+);
+
+CREATE TABLE match_fouls (
+  foul_id UUID PRIMARY KEY,
+  match_id UUID REFERENCES matches(match_id) ON DELETE CASCADE,
+  offender_card_id UUID,
+  victim_card_id UUID,
+  foul_type VARCHAR(20) NOT NULL,
+  card_given VARCHAR(10),
+  position_x INT,
+  position_y INT,
+  in_scoring_position BOOLEAN DEFAULT FALSE,
+  turn_number INT NOT NULL,
+  created_at TIMESTAMP NOT NULL DEFAULT NOW()
+);
+
+CREATE TABLE match_injuries (
+  injury_id UUID PRIMARY KEY,
+  match_id UUID REFERENCES matches(match_id) ON DELETE CASCADE,
+  user_card_id UUID REFERENCES user_cards(user_card_id) ON DELETE CASCADE,
+  severity VARCHAR(20) NOT NULL,
+  recovery_time INT NOT NULL,
+  foul_id UUID REFERENCES match_fouls(foul_id) ON DELETE SET NULL,
+  turn_number INT NOT NULL,
+  created_at TIMESTAMP NOT NULL DEFAULT NOW()
+);
+
+-- Tournament System
+CREATE TABLE tournaments (
+  tournament_id UUID PRIMARY KEY,
+  name VARCHAR(100) NOT NULL,
+  description TEXT,
+  created_by UUID REFERENCES users(user_id) ON DELETE SET NULL,
+  start_date TIMESTAMP NOT NULL,
+  end_date TIMESTAMP NOT NULL,
+  max_participants INT NOT NULL,
+  status VARCHAR(20) NOT NULL,
+  min_age INT DEFAULT 0,
+  requires_kyc BOOLEAN DEFAULT FALSE,
+  entry_fee DECIMAL(10,2) DEFAULT 0,
+  blockchain_tournament_id VARCHAR(100),
+  created_at TIMESTAMP NOT NULL DEFAULT NOW()
+);
+
+CREATE TABLE tournament_participants (
+  tournament_id UUID REFERENCES tournaments(tournament_id) ON DELETE CASCADE,
+  user_id UUID REFERENCES users(user_id) ON DELETE CASCADE,
+  team_id UUID REFERENCES teams(team_id) ON DELETE CASCADE,
+  joined_at TIMESTAMP NOT NULL DEFAULT NOW(),
+  status VARCHAR(20) NOT NULL,
+  PRIMARY KEY (tournament_id, user_id)
+);
+
+CREATE TABLE tournament_rounds (
+  round_id UUID PRIMARY KEY,
+  tournament_id UUID REFERENCES tournaments(tournament_id) ON DELETE CASCADE,
+  round_number INT NOT NULL,
+  start_date TIMESTAMP,
+  end_date TIMESTAMP,
+  status VARCHAR(20) NOT NULL,
+  created_at TIMESTAMP NOT NULL DEFAULT NOW()
+);
+
+CREATE TABLE tournament_matches (
+  tournament_match_id UUID PRIMARY KEY,
+  tournament_id UUID REFERENCES tournaments(tournament_id) ON DELETE CASCADE,
+  round_id UUID REFERENCES tournament_rounds(round_id) ON DELETE CASCADE,
+  match_id UUID REFERENCES matches(match_id) ON DELETE CASCADE,
+  participant1_id UUID REFERENCES users(user_id) ON DELETE CASCADE,
+  participant2_id UUID REFERENCES users(user_id) ON DELETE CASCADE,
+  winner_id UUID REFERENCES users(user_id) ON DELETE SET NULL,
+  status VARCHAR(20) NOT NULL,
+  scheduled_time TIMESTAMP,
+  created_at TIMESTAMP NOT NULL DEFAULT NOW()
+);
+
+CREATE TABLE tournament_prizes (
+  prize_id UUID PRIMARY KEY,
+  tournament_id UUID REFERENCES tournaments(tournament_id) ON DELETE CASCADE,
+  position INT NOT NULL,
+  reward_type VARCHAR(20) NOT NULL,
+  reward_amount DECIMAL(10,2),
+  card_pack_id UUID REFERENCES card_packs(pack_id) ON DELETE SET NULL,
+  description TEXT,
+  created_at TIMESTAMP NOT NULL DEFAULT NOW()
+);
+
+-- Player Progression System
+CREATE TABLE player_progression (
+  progression_id UUID PRIMARY KEY,
+  user_id UUID REFERENCES users(user_id) ON DELETE CASCADE,
+  level INT NOT NULL DEFAULT 1,
+  experience INT NOT NULL DEFAULT 0,
+  coins INT NOT NULL DEFAULT 0,
+  matches_played INT NOT NULL DEFAULT 0,
+  matches_won INT NOT NULL DEFAULT 0,
+  matches_drawn INT NOT NULL DEFAULT 0,
+  matches_lost INT NOT NULL DEFAULT 0,
+  goals_scored INT NOT NULL DEFAULT 0,
+  goals_conceded INT NOT NULL DEFAULT 0,
+  clean_sheets INT NOT NULL DEFAULT 0,
+  yellow_cards INT NOT NULL DEFAULT 0,
+  red_cards INT NOT NULL DEFAULT 0,
+  created_at TIMESTAMP NOT NULL DEFAULT NOW(),
+  updated_at TIMESTAMP NOT NULL DEFAULT NOW()
+);
+
+CREATE TABLE player_rewards (
+  reward_id UUID PRIMARY KEY,
+  user_id UUID REFERENCES users(user_id) ON DELETE CASCADE,
+  reward_type VARCHAR(20) NOT NULL,
+  amount INT NOT NULL,
+  reason TEXT,
+  match_id UUID REFERENCES matches(match_id) ON DELETE SET NULL,
+  tournament_id UUID REFERENCES tournaments(tournament_id) ON DELETE SET NULL,
+  created_at TIMESTAMP NOT NULL DEFAULT NOW()
+);
+
+CREATE TABLE level_rewards (
+  level INT PRIMARY KEY,
+  coins INT NOT NULL,
+  card_pack_type VARCHAR(20),
+  description TEXT,
+  created_at TIMESTAMP NOT NULL DEFAULT NOW()
+);
+
+-- Achievement System
+CREATE TABLE achievement_types (
+  achievement_type_id VARCHAR(50) PRIMARY KEY,
+  name VARCHAR(100) NOT NULL,
+  description TEXT,
+  icon_url TEXT,
+  category VARCHAR(50) NOT NULL,
+  created_at TIMESTAMP NOT NULL DEFAULT NOW()
+);
+
+CREATE TABLE user_achievements (
+  user_id UUID REFERENCES users(user_id) ON DELETE CASCADE,
+  achievement_type_id VARCHAR(50) REFERENCES achievement_types(achievement_type_id) ON DELETE CASCADE,
+  progress INT NOT NULL DEFAULT 0,
+  completed BOOLEAN DEFAULT FALSE,
+  completed_at TIMESTAMP,
+  created_at TIMESTAMP NOT NULL DEFAULT NOW(),
+  updated_at TIMESTAMP NOT NULL DEFAULT NOW(),
+  PRIMARY KEY (user_id, achievement_type_id)
+);
+
+-- Challenge System
+CREATE TABLE challenge_types (
+  challenge_type_id VARCHAR(50) PRIMARY KEY,
+  name VARCHAR(100) NOT NULL,
+  description TEXT,
+  target_value INT NOT NULL,
+  reward_type VARCHAR(20) NOT NULL,
+  reward_amount INT NOT NULL,
+  duration_hours INT,
+  category VARCHAR(50) NOT NULL,
+  created_at TIMESTAMP NOT NULL DEFAULT NOW()
+);
+
+CREATE TABLE user_challenges (
+  challenge_id UUID PRIMARY KEY,
+  user_id UUID REFERENCES users(user_id) ON DELETE CASCADE,
+  challenge_type_id VARCHAR(50) REFERENCES challenge_types(challenge_type_id) ON DELETE CASCADE,
+  progress INT NOT NULL DEFAULT 0,
+  start_time TIMESTAMP NOT NULL DEFAULT NOW(),
+  end_time TIMESTAMP NOT NULL,
+  completed BOOLEAN DEFAULT FALSE,
+  completed_at TIMESTAMP,
+  reward_claimed BOOLEAN DEFAULT FALSE,
+  created_at TIMESTAMP NOT NULL DEFAULT NOW(),
+  updated_at TIMESTAMP NOT NULL DEFAULT NOW()
+);
+
+-- Marketplace System
+CREATE TABLE marketplace_listings (
+  listing_id UUID PRIMARY KEY,
+  seller_id UUID REFERENCES users(user_id) ON DELETE CASCADE,
+  item_type VARCHAR(20) NOT NULL,
+  item_id UUID NOT NULL,
+  price DECIMAL(10,2) NOT NULL,
+  currency VARCHAR(10) NOT NULL DEFAULT 'TOKEN',
+  status VARCHAR(20) NOT NULL,
+  blockchain_listing_id VARCHAR(100),
+  created_at TIMESTAMP NOT NULL DEFAULT NOW(),
+  updated_at TIMESTAMP NOT NULL DEFAULT NOW(),
+  expires_at TIMESTAMP
+);
+
+CREATE TABLE marketplace_transactions (
+  transaction_id UUID PRIMARY KEY,
+  listing_id UUID REFERENCES marketplace_listings(listing_id) ON DELETE CASCADE,
+  buyer_id UUID REFERENCES users(user_id) ON DELETE CASCADE,
+  price DECIMAL(10,2) NOT NULL,
+  fee DECIMAL(10,2) NOT NULL,
+  currency VARCHAR(10) NOT NULL DEFAULT 'TOKEN',
+  blockchain_tx_hash VARCHAR(100),
+  status VARCHAR(20) NOT NULL,
+  created_at TIMESTAMP NOT NULL DEFAULT NOW()
+);
+
+-- Blockchain Integration
+CREATE TABLE nft_tokens (
+  nft_id UUID PRIMARY KEY,
+  user_id UUID REFERENCES users(user_id) ON DELETE CASCADE,
+  token_id VARCHAR(100) NOT NULL,
+  contract_address VARCHAR(42) NOT NULL,
+  token_type VARCHAR(20) NOT NULL,
+  metadata JSONB,
+  item_type VARCHAR(20) NOT NULL,
+  item_id UUID NOT NULL,
+  created_at TIMESTAMP NOT NULL DEFAULT NOW(),
+  blockchain_mint_date TIMESTAMP,
+  blockchain_tx_hash VARCHAR(100)
+);
+
+CREATE TABLE wallet_connections (
+  connection_id UUID PRIMARY KEY,
+  user_id UUID REFERENCES users(user_id) ON DELETE CASCADE,
+  wallet_address VARCHAR(42) NOT NULL,
+  wallet_type VARCHAR(20) NOT NULL,
+  is_active BOOLEAN DEFAULT TRUE,
+  created_at TIMESTAMP NOT NULL DEFAULT NOW(),
+  last_connected TIMESTAMP NOT NULL DEFAULT NOW()
+);
+
+CREATE TABLE locked_rewards (
+  reward_id UUID PRIMARY KEY,
+  user_id UUID REFERENCES users(user_id) ON DELETE CASCADE,
+  locked_amount DECIMAL(18,8) NOT NULL,
+  projected_value DECIMAL(18,8) NOT NULL,
+  staking_yield DECIMAL(5,4) NOT NULL,
+  compounding_frequency VARCHAR(20) NOT NULL,
+  unlock_date TIMESTAMP NOT NULL,
+  created_at TIMESTAMP NOT NULL DEFAULT NOW(),
+  updated_at TIMESTAMP NOT NULL DEFAULT NOW()
+);
+
+CREATE TABLE reward_transactions (
+  transaction_id UUID PRIMARY KEY,
+  user_id UUID REFERENCES users(user_id) ON DELETE CASCADE,
+  reward_id UUID REFERENCES locked_rewards(reward_id) ON DELETE SET NULL,
+  type VARCHAR(20) NOT NULL,
+  amount DECIMAL(18,8) NOT NULL,
+  reason TEXT,
+  status VARCHAR(20) NOT NULL,
+  created_at TIMESTAMP NOT NULL DEFAULT NOW()
+);
+
+-- Payment System
+CREATE TABLE payment_methods (
+  method_id UUID PRIMARY KEY,
+  user_id UUID REFERENCES users(user_id) ON DELETE CASCADE,
+  provider VARCHAR(50) NOT NULL,
+  payment_token VARCHAR(255),
+  card_last_four VARCHAR(4),
+  card_brand VARCHAR(20),
+  is_default BOOLEAN DEFAULT FALSE,
+  expires_at TIMESTAMP,
+  created_at TIMESTAMP NOT NULL DEFAULT NOW(),
+  updated_at TIMESTAMP NOT NULL DEFAULT NOW()
+);
+
+CREATE TABLE payment_transactions (
+  transaction_id UUID PRIMARY KEY,
+  user_id UUID REFERENCES users(user_id) ON DELETE CASCADE,
+  amount DECIMAL(10,2) NOT NULL,
+  currency VARCHAR(3) NOT NULL,
+  payment_method VARCHAR(50) NOT NULL,
+  provider_transaction_id VARCHAR(255),
+  item_type VARCHAR(50),
+  item_id VARCHAR(255),
+  status VARCHAR(20) NOT NULL,
+  created_at TIMESTAMP NOT NULL DEFAULT NOW(),
+  completed_at TIMESTAMP
+);
+
+CREATE TABLE price_points (
+  price_point_id UUID PRIMARY KEY,
+  name VARCHAR(100) NOT NULL,
+  description TEXT,
+  amount DECIMAL(10,2) NOT NULL,
+  currency VARCHAR(3) NOT NULL DEFAULT 'USD',
+  token_amount INT NOT NULL,
+  bonus_amount INT DEFAULT 0,
+  is_featured BOOLEAN DEFAULT FALSE,
+  is_available BOOLEAN DEFAULT TRUE,
+  created_at TIMESTAMP NOT NULL DEFAULT NOW(),
+  updated_at TIMESTAMP NOT NULL DEFAULT NOW()
+);
+
+-- Messaging System
+CREATE TABLE conversations (
+  conversation_id UUID PRIMARY KEY,
+  type VARCHAR(20) NOT NULL,
+  creator_id UUID REFERENCES users(user_id) ON DELETE SET NULL,
+  created_at TIMESTAMP NOT NULL DEFAULT NOW(),
+  updated_at TIMESTAMP NOT NULL DEFAULT NOW(),
+  metadata JSONB
+);
+
+CREATE TABLE conversation_participants (
+  conversation_id UUID REFERENCES conversations(conversation_id) ON DELETE CASCADE,
+  user_id UUID REFERENCES users(user_id) ON DELETE CASCADE,
+  joined_at TIMESTAMP NOT NULL DEFAULT NOW(),
+  last_read_at TIMESTAMP,
+  is_active BOOLEAN DEFAULT TRUE,
+  PRIMARY KEY (conversation_id, user_id)
+);
+
+CREATE TABLE encrypted_messages (
+  message_id UUID PRIMARY KEY,
+  conversation_id UUID REFERENCES conversations(conversation_id) ON DELETE CASCADE,
+  sender_id UUID REFERENCES users(user_id) ON DELETE SET NULL,
+  recipient_id UUID REFERENCES users(user_id) ON DELETE SET NULL,
+  encrypted_content TEXT NOT NULL,
+  nonce VARCHAR(255) NOT NULL,
+  type VARCHAR(20) NOT NULL DEFAULT 'text',
+  metadata JSONB,
+  sent_at TIMESTAMP NOT NULL DEFAULT NOW(),
+  delivered_at TIMESTAMP,
+  read_at TIMESTAMP
+);
+
+CREATE TABLE user_public_keys (
+  user_id UUID REFERENCES users(user_id) ON DELETE CASCADE PRIMARY KEY,
+  public_key TEXT NOT NULL,
+  created_at TIMESTAMP NOT NULL DEFAULT NOW(),
+  updated_at TIMESTAMP NOT NULL DEFAULT NOW()
+);
+
+-- Content and Asset Management
+CREATE TABLE game_content (
+  content_id UUID PRIMARY KEY,
+  content_type VARCHAR(50) NOT NULL,
+  name VARCHAR(100) NOT NULL,
+  description TEXT,
+  content_data JSONB,
+  is_active BOOLEAN DEFAULT TRUE,
+  created_at TIMESTAMP NOT NULL DEFAULT NOW(),
+  updated_at TIMESTAMP NOT NULL DEFAULT NOW()
+);
+
+CREATE TABLE user_customizations (
+  customization_id UUID PRIMARY KEY,
+  user_id UUID REFERENCES users(user_id) ON DELETE CASCADE,
+  customization_type VARCHAR(50) NOT NULL,
+  applied_to UUID,
+  customization_data JSONB,
+  created_at TIMESTAMP NOT NULL DEFAULT NOW(),
+  updated_at TIMESTAMP NOT NULL DEFAULT NOW()
+);
+
+-- Season Management
+CREATE TABLE seasons (
+  season_id UUID PRIMARY KEY,
+  name VARCHAR(100) NOT NULL,
+  start_date TIMESTAMP NOT NULL,
+  end_date TIMESTAMP NOT NULL,
+  status VARCHAR(20) NOT NULL,
+  rewards JSONB,
+  created_at TIMESTAMP NOT NULL DEFAULT NOW(),
+  updated_at TIMESTAMP NOT NULL DEFAULT NOW()
+);
+
+CREATE TABLE user_season_stats (
+  user_id UUID REFERENCES users(user_id) ON DELETE CASCADE,
+  season_id UUID REFERENCES seasons(season_id) ON DELETE CASCADE,
+  matches_played INT DEFAULT 0,
+  matches_won INT DEFAULT 0,
+  matches_drawn INT DEFAULT 0,
+  matches_lost INT DEFAULT 0,
+  goals_scored INT DEFAULT 0,
+  goals_conceded INT DEFAULT 0,
+  points INT DEFAULT 0,
+  rank INT,
+  rewards_claimed BOOLEAN DEFAULT FALSE,
+  created_at TIMESTAMP NOT NULL DEFAULT NOW(),
+  updated_at TIMESTAMP NOT NULL DEFAULT NOW(),
+  PRIMARY KEY (user_id, season_id)
+);
+
+-- User Activity and Engagement
+CREATE TABLE user_logins (
+  login_id UUID PRIMARY KEY,
+  user_id UUID REFERENCES users(user_id) ON DELETE CASCADE,
+  ip_address VARCHAR(45),
+  user_agent TEXT,
+  platform VARCHAR(50),
+  success BOOLEAN NOT NULL,
+  login_at TIMESTAMP NOT NULL DEFAULT NOW()
+);
+
+CREATE TABLE user_activity (
+  activity_id UUID PRIMARY KEY,
+  user_id UUID REFERENCES users(user_id) ON DELETE CASCADE,
+  activity_type VARCHAR(50) NOT NULL,
+  activity_data JSONB,
+  created_at TIMESTAMP NOT NULL DEFAULT NOW()
+);
+
+CREATE TABLE notifications (
+  notification_id UUID PRIMARY KEY,
+  user_id UUID REFERENCES users(user_id) ON DELETE CASCADE,
+  type VARCHAR(50) NOT NULL,
+  title VARCHAR(100) NOT NULL,
+  message TEXT NOT NULL,
+  is_read BOOLEAN DEFAULT FALSE,
+  action_link TEXT,
+  action_data JSONB,
+  created_at TIMESTAMP NOT NULL DEFAULT NOW()
+);
+
+-- Friend System
+CREATE TABLE friend_requests (
+  request_id UUID PRIMARY KEY,
+  sender_id UUID REFERENCES users(user_id) ON DELETE CASCADE,
+  receiver_id UUID REFERENCES users(user_id) ON DELETE CASCADE,
+  status VARCHAR(20) NOT NULL DEFAULT 'pending',
+  sent_at TIMESTAMP NOT NULL DEFAULT NOW(),
+  updated_at TIMESTAMP NOT NULL DEFAULT NOW(),
+  UNIQUE(sender_id, receiver_id)
+);
+
+CREATE TABLE friends (
+  user_id UUID REFERENCES users(user_id) ON DELETE CASCADE,
+  friend_id UUID REFERENCES users(user_id) ON DELETE CASCADE,
+  became_friends_at TIMESTAMP NOT NULL DEFAULT NOW(),
+  PRIMARY KEY (user_id, friend_id)
+);
+
+-- Create indexes
+CREATE INDEX idx_user_cards_user_id ON user_cards(user_id);
+CREATE INDEX idx_user_cards_card_id ON user_cards(card_id);
+CREATE INDEX idx_teams_user_id ON teams(user_id);
+CREATE INDEX idx_match_events_match_id ON match_events(match_id);
+CREATE INDEX idx_match_moves_match_id ON match_moves(match_id);
+CREATE INDEX idx_tournament_participants_tournament_id ON tournament_participants(tournament_id);
+CREATE INDEX idx_marketplace_listings_seller_id ON marketplace_listings(seller_id);
+CREATE INDEX idx_marketplace_listings_status ON marketplace_listings(status);
+CREATE INDEX idx_marketplace_transactions_listing_id ON marketplace_transactions(listing_id);
+CREATE INDEX idx_locked_rewards_user_id ON locked_rewards(user_id);
+CREATE INDEX idx_reward_transactions_user_id ON reward_transactions(user_id);
+CREATE INDEX idx_payment_transactions_user_id ON payment_transactions(user_id);
+CREATE INDEX idx_conversations_updated_at ON conversations(updated_at);
+CREATE INDEX idx_encrypted_messages_conversation_id ON encrypted_messages(conversation_id);
+CREATE INDEX idx_encrypted_messages_recipient_id ON encrypted_messages(recipient_id);
+CREATE INDEX idx_encrypted_messages_sent_at ON encrypted_messages(sent_at);
+CREATE INDEX idx_user_activity_user_id_created_at ON user_activity(user_id, created_at);
+CREATE INDEX idx_notifications_user_id ON notifications(user_id);
+CREATE INDEX idx_card_templates_rarity ON card_templates(rarity);
+CREATE INDEX idx_matches_home_team_id ON matches(home_team_id);
+CREATE INDEX idx_matches_away_team_id ON matches(away_team_id);
+CREATE INDEX idx_tournaments_status ON tournaments(status);
+CREATE INDEX idx_seasons_status ON seasons(status);
+
+-- Create view for leaderboard
+CREATE VIEW user_leaderboard AS
+SELECT 
+  u.user_id,
+  u.username,
+  up.display_name,
+  up.avatar_url,
+  pp.level,
+  pp.experience,
+  pp.matches_played,
+  pp.matches_won,
+  pp.matches_drawn,
+  pp.matches_lost,
+  pp.goals_scored,
+  pp.goals_conceded,
+  pp.matches_won * 3 + pp.matches_drawn AS points,
+  CASE WHEN pp.matches_played > 0 THEN 
+    CAST(pp.matches_won AS FLOAT) / pp.matches_played * 100 
+  ELSE 0 END AS win_percentage
+FROM 
+  users u
+JOIN 
+  user_profiles up ON u.user_id = up.user_id
+JOIN 
+  player_progression pp ON u.user_id = pp.user_id
+WHERE 
+  u.is_active = TRUE;
+
+-- Create view for marketplace listings with item details
+CREATE VIEW marketplace_listing_details AS
+SELECT 
+  ml.listing_id,
+  ml.seller_id,
+  u.username AS seller_name,
+  ml.item_type,
+  ml.item_id,
+  ml.price,
+  ml.currency,
+  ml.status,
+  ml.created_at,
+  ml.expires_at,
+  CASE 
+    WHEN ml.item_type = 'player_card' THEN 
+      jsonb_build_object(
+        'card_id', pc.card_id,
+        'position', pc.position,
+        'rating', pc.rating,
+        'is_legendary', pc.is_legendary
+      )
+    WHEN ml.item_type = 'team' THEN
+      jsonb_build_object(
+        'team_id', t.team_id,
+        'name', t.name,
+        'formation', t.formation,
+        'rating', t.rating
+      )
+    ELSE NULL
+  END AS item_details
+FROM 
+  marketplace_listings ml
+JOIN 
+  users u ON ml.seller_id = u.user_id
+LEFT JOIN 
+  player_cards pc ON ml.item_type = 'player_card' AND ml.item_id::UUID = pc.card_id
+LEFT JOIN 
+  teams t ON ml.item_type = 'team' AND ml.item_id::UUID = t.team_id
+WHERE 
+  ml.status = 'active';
+
+-- Create functions for age verification
+CREATE OR REPLACE FUNCTION update_user_age()
+RETURNS TRIGGER AS $
+BEGIN
+  -- Calculate age
+  NEW.age := EXTRACT(YEAR FROM AGE(CURRENT_DATE, NEW.date_of_birth));
+  -- Set underage flag
+  NEW.is_underage := NEW.age < 18;
+  RETURN NEW;
+END;
+$ LANGUAGE plpgsql;
+
+CREATE TRIGGER before_user_insert_update
+BEFORE INSERT OR UPDATE OF date_of_birth ON users
+FOR EACH ROW
+EXECUTE FUNCTION update_user_age();
+
+-- Create function to update age verification statuses
+CREATE OR REPLACE FUNCTION update_age_verifications()
+RETURNS VOID AS $
+DECLARE
+  r RECORD;
+BEGIN
+  FOR r IN 
+    SELECT 
+      av.user_id, 
+      av.date_of_birth,
+      av.unlock_date,
+      EXTRACT(YEAR FROM AGE(CURRENT_DATE, av.date_of_birth)) AS new_age
+    FROM 
+      age_verification av
+    WHERE 
+      av.is_underage = TRUE AND
+      EXTRACT(YEAR FROM AGE(CURRENT_DATE, av.date_of_birth)) >= 18
+  LOOP
+    -- Update age verification record
+    UPDATE age_verification 
+    SET 
+      age = r.new_age,
+      is_underage = FALSE,
+      updated_at = NOW()
+    WHERE 
+      user_id = r.user_id;
+    
+    -- Update user record
+    UPDATE users
+    SET
+      age = r.new_age,
+      is_underage = FALSE
+    WHERE
+      user_id = r.user_id;
+      
+    -- Trigger notification
+    INSERT INTO notifications (
+      notification_id,
+      user_id,
+      type,
+      title,
+      message,
+      action_data
+    ) VALUES (
+      uuid_generate_v4(),
+      r.user_id,
+      'age_verification',
+      'Age Restriction Lifted',
+      'You are now eligible for all features in FootballChess!',
+      jsonb_build_object('unlockDate', r.unlock_date)
+    );
+  END LOOP;
+END;
+$ LANGUAGE plpgsql;
+
+-- Create function to process pending NFTs
+CREATE OR REPLACE FUNCTION check_nft_eligibility()
+RETURNS VOID AS $
+DECLARE
+  r RECORD;
+BEGIN
+  FOR r IN 
+    SELECT 
+      uc.user_card_id,
+      uc.user_id,
+      uc.card_id,
+      u.age,
+      u.is_underage,
+      k.status AS kyc_status
+    FROM 
+      user_cards uc
+    JOIN 
+      users u ON uc.user_id = u.user_id
+    LEFT JOIN 
+      kyc_requests k ON u.user_id = k.user_id AND k.status = 'approved'
+    WHERE 
+      uc.nft_status = 'pending_age' AND
+      u.is_underage = FALSE
+  LOOP
+    -- Update NFT status to pending_kyc if user is not underage but KYC not approved
+    IF r.kyc_status IS NULL THEN
+      UPDATE user_cards
+      SET nft_status = 'pending_kyc'
+      WHERE user_card_id = r.user_card_id;
+    ELSE
+      -- Update NFT status to pending_mint if user is not underage and KYC is approved
+      UPDATE user_cards
+      SET nft_status = 'pending_mint'
+      WHERE user_card_id = r.user_card_id;
+      
+      -- Create notification
+      INSERT INTO notifications (
+        notification_id,
+        user_id,
+        type,
+        title,
+        message,
+        action_data
+      ) VALUES (
+        uuid_generate_v4(),
+        r.user_id,
+        'nft_eligible',
+        'NFT Minting Available',
+        'Your player card is now eligible for minting as an NFT!',
+        jsonb_build_object('cardId', r.card_id)
+      );
+    END IF;
+  END LOOP;
+END;
+$ LANGUAGE plpgsql;
+
+-- Create scheduled job to run these functions daily
+-- This would typically be set up with a tool like pg_cron or an external scheduler
+COMMENT ON FUNCTION update_age_verifications() IS 'Run daily to update age verifications';
+COMMENT ON FUNCTION check_nft_eligibility() IS 'Run daily to check NFT eligibility';

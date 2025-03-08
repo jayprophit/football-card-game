@@ -1,0 +1,1927 @@
+  async getUserPlayerCards(address = null) {
+    try {
+      const contract = this.contracts.playerCard.ethers;
+      
+      if (!contract) {
+        throw new Error('Player card contract not initialized');
+      }
+      
+      const userAddress = address || this.userAddress;
+      
+      if (!userAddress) {
+        throw new Error('No user address provided and wallet not connected');
+      }
+      
+      // Get balance of user
+      const balance = await contract.balanceOf(userAddress);
+      const tokenIds = [];
+      
+      // Get token IDs for each owned token
+      for (let i = 0; i < balance; i++) {
+        const tokenId = await contract.tokenOfOwnerByIndex(userAddress, i);
+        tokenIds.push(tokenId.toNumber());
+      }
+      
+      return tokenIds;
+    } catch (error) {
+      console.error('Error getting user player cards:', error);
+      throw error;
+    }
+  }
+  
+  /**
+   * Get user's teams
+   * @param {string} address User address (defaults to connected wallet)
+   * @returns {Promise<Array>} Array of team token IDs
+   */
+  async getUserTeams(address = null) {
+    try {
+      const contract = this.contracts.team.ethers;
+      
+      if (!contract) {
+        throw new Error('Team contract not initialized');
+      }
+      
+      const userAddress = address || this.userAddress;
+      
+      if (!userAddress) {
+        throw new Error('No user address provided and wallet not connected');
+      }
+      
+      // Get balance of user
+      const balance = await contract.balanceOf(userAddress);
+      const tokenIds = [];
+      
+      // Get token IDs for each owned token
+      for (let i = 0; i < balance; i++) {
+        const tokenId = await contract.tokenOfOwnerByIndex(userAddress, i);
+        tokenIds.push(tokenId.toNumber());
+      }
+      
+      return tokenIds;
+    } catch (error) {
+      console.error('Error getting user teams:', error);
+      throw error;
+    }
+  }
+  
+  /**
+   * Get user's reward token balance
+   * @param {string} address User address (defaults to connected wallet)
+   * @returns {Promise<Object>} Token balance info
+   */
+  async getRewardTokenBalance(address = null) {
+    try {
+      const contract = this.contracts.rewardToken.ethers;
+      
+      if (!contract) {
+        throw new Error('Reward token contract not initialized');
+      }
+      
+      const userAddress = address || this.userAddress;
+      
+      if (!userAddress) {
+        throw new Error('No user address provided and wallet not connected');
+      }
+      
+      // Get balance
+      const balance = await contract.balanceOf(userAddress);
+      const balanceFormatted = ethers.utils.formatUnits(balance, 18); // Assuming 18 decimals
+      
+      // Get locked balance for underage users
+      let lockedBalance = 0;
+      let lockedBalanceFormatted = '0';
+      
+      try {
+        const locked = await contract.lockedBalanceOf(userAddress);
+        lockedBalance = locked;
+        lockedBalanceFormatted = ethers.utils.formatUnits(locked, 18);
+      } catch (error) {
+        // Contract might not support this function
+        console.warn('Could not fetch locked balance:', error.message);
+      }
+      
+      return {
+        address: userAddress,
+        balance: balance.toString(),
+        balanceFormatted,
+        lockedBalance: lockedBalance.toString(),
+        lockedBalanceFormatted,
+        totalBalance: (BigInt(balance) + BigInt(lockedBalance)).toString(),
+        totalBalanceFormatted: ethers.utils.formatUnits(
+          BigInt(balance) + BigInt(lockedBalance), 
+          18
+        )
+      };
+    } catch (error) {
+      console.error('Error getting reward token balance:', error);
+      throw error;
+    }
+  }
+  
+  /**
+   * Get active marketplace listings
+   * @param {number} start Start index
+   * @param {number} count Number of listings to fetch
+   * @returns {Promise<Array>} Array of marketplace listings
+   */
+  async getMarketplaceListings(start = 0, count = 10) {
+    try {
+      const contract = this.contracts.marketplace.ethers;
+      
+      if (!contract) {
+        throw new Error('Marketplace contract not initialized');
+      }
+      
+      // Get active listings
+      const listingIds = await contract.getActiveListings(start, count);
+      const listings = [];
+      
+      // Get details for each listing
+      for (const id of listingIds) {
+        if (id.toNumber() === 0) continue; // Skip empty results
+        
+        const listing = await contract.listings(id);
+        
+        const formattedListing = {
+          id: id.toNumber(),
+          seller: listing.seller,
+          tokenId: listing.tokenId.toNumber(),
+          price: listing.price.toString(),
+          priceFormatted: ethers.utils.formatUnits(listing.price, 18),
+          status: ['Active', 'Sold', 'Cancelled'][listing.status],
+          contractAddress: listing.contractAddress,
+          listedAt: new Date(listing.listedAt.toNumber() * 1000).toISOString(),
+          isPlayerCard: listing.contractAddress === this.contractAddresses.playerCard,
+          isTeam: listing.contractAddress === this.contractAddresses.team
+        };
+        
+        // Get additional details based on contract type
+        if (formattedListing.isPlayerCard) {
+          try {
+            const playerCard = await this.getPlayerCard(formattedListing.tokenId);
+            formattedListing.item = playerCard;
+          } catch (error) {
+            console.warn(`Error fetching player card details for listing ${id}:`, error);
+          }
+        } else if (formattedListing.isTeam) {
+          try {
+            const team = await this.getTeam(formattedListing.tokenId);
+            formattedListing.item = team;
+          } catch (error) {
+            console.warn(`Error fetching team details for listing ${id}:`, error);
+          }
+        }
+        
+        listings.push(formattedListing);
+      }
+      
+      return listings;
+    } catch (error) {
+      console.error('Error getting marketplace listings:', error);
+      throw error;
+    }
+  }
+  
+  /**
+   * Create a player card (admin function)
+   * @param {Object} playerData Player card data
+   * @param {string} to Recipient address (defaults to connected wallet)
+   * @returns {Promise<Object>} Transaction result
+   */
+  async createPlayerCard(playerData, to = null) {
+    try {
+      const contract = this.contracts.playerCard.web3;
+      
+      if (!contract) {
+        throw new Error('Player card contract not initialized');
+      }
+      
+      if (!this.walletConnected) {
+        throw new Error('Wallet not connected');
+      }
+      
+      const recipient = to || this.userAddress;
+      
+      // Prepare transaction
+      const tx = contract.methods.createPlayerCard(
+        recipient,
+        playerData.position,
+        playerData.rating,
+        playerData.number,
+        playerData.movementType,
+        playerData.speed,
+        playerData.passing,
+        playerData.shooting,
+        playerData.defending,
+        playerData.durability,
+        playerData.legendary || false
+      );
+      
+      // Estimate gas
+      const gas = await tx.estimateGas({ from: this.userAddress });
+      
+      // Send transaction
+      const receipt = await tx.send({
+        from: this.userAddress,
+        gas
+      });
+      
+      console.log('Player card created:', receipt);
+      
+      // Get token ID from event
+      let tokenId = null;
+      if (receipt.events && receipt.events.PlayerCardCreated) {
+        tokenId = receipt.events.PlayerCardCreated.returnValues.tokenId;
+      } else {
+        // Fallback - Get last token minted
+        const totalSupply = await contract.methods.totalSupply().call();
+        tokenId = totalSupply - 1;
+      }
+      
+      return {
+        success: true,
+        tokenId,
+        transactionHash: receipt.transactionHash,
+        receipt
+      };
+    } catch (error) {
+      console.error('Error creating player card:', error);
+      throw error;
+    }
+  }
+  
+  /**
+   * Create a team (user function)
+   * @param {Object} teamData Team data
+   * @returns {Promise<Object>} Transaction result
+   */
+  async createTeam(teamData) {
+    try {
+      const contract = this.contracts.team.web3;
+      
+      if (!contract) {
+        throw new Error('Team contract not initialized');
+      }
+      
+      if (!this.walletConnected) {
+        throw new Error('Wallet not connected');
+      }
+      
+      // Prepare transaction
+      const tx = contract.methods.createTeam(
+        this.userAddress,
+        teamData.name,
+        teamData.country,
+        teamData.formation,
+        teamData.primaryColor,
+        teamData.secondaryColor,
+        teamData.logoURI
+      );
+      
+      // Estimate gas
+      const gas = await tx.estimateGas({ from: this.userAddress });
+      
+      // Send transaction
+      const receipt = await tx.send({
+        from: this.userAddress,
+        gas
+      });
+      
+      console.log('Team created:', receipt);
+      
+      // Get token ID from event
+      let tokenId = null;
+      if (receipt.events && receipt.events.TeamCreated) {
+        tokenId = receipt.events.TeamCreated.returnValues.tokenId;
+      } else {
+        // Fallback - Get last token minted
+        const totalSupply = await contract.methods.totalSupply().call();
+        tokenId = totalSupply - 1;
+      }
+      
+      return {
+        success: true,
+        tokenId,
+        transactionHash: receipt.transactionHash,
+        receipt
+      };
+    } catch (error) {
+      console.error('Error creating team:', error);
+      throw error;
+    }
+  }
+  
+  /**
+   * Add player to team
+   * @param {number} teamId Team ID
+   * @param {number} playerId Player card ID
+   * @returns {Promise<Object>} Transaction result
+   */
+  async addPlayerToTeam(teamId, playerId) {
+    try {
+      const contract = this.contracts.playerCard.web3;
+      
+      if (!contract) {
+        throw new Error('Player card contract not initialized');
+      }
+      
+      if (!this.walletConnected) {
+        throw new Error('Wallet not connected');
+      }
+      
+      // Prepare transaction
+      const tx = contract.methods.addPlayerToTeam(teamId, playerId);
+      
+      // Estimate gas
+      const gas = await tx.estimateGas({ from: this.userAddress });
+      
+      // Send transaction
+      const receipt = await tx.send({
+        from: this.userAddress,
+        gas
+      });
+      
+      console.log('Player added to team:', receipt);
+      
+      return {
+        success: true,
+        teamId,
+        playerId,
+        transactionHash: receipt.transactionHash,
+        receipt
+      };
+    } catch (error) {
+      console.error('Error adding player to team:', error);
+      throw error;
+    }
+  }
+  
+  /**
+   * Remove player from team
+   * @param {number} playerId Player card ID
+   * @returns {Promise<Object>} Transaction result
+   */
+  async removePlayerFromTeam(playerId) {
+    try {
+      const contract = this.contracts.playerCard.web3;
+      
+      if (!contract) {
+        throw new Error('Player card contract not initialized');
+      }
+      
+      if (!this.walletConnected) {
+        throw new Error('Wallet not connected');
+      }
+      
+      // Prepare transaction
+      const tx = contract.methods.removePlayerFromTeam(playerId);
+      
+      // Estimate gas
+      const gas = await tx.estimateGas({ from: this.userAddress });
+      
+      // Send transaction
+      const receipt = await tx.send({
+        from: this.userAddress,
+        gas
+      });
+      
+      console.log('Player removed from team:', receipt);
+      
+      return {
+        success: true,
+        playerId,
+        transactionHash: receipt.transactionHash,
+        receipt
+      };
+    } catch (error) {
+      console.error('Error removing player from team:', error);
+      throw error;
+    }
+  }
+  
+  /**
+   * Apply injury to player card
+   * @param {number} playerId Player card ID
+   * @param {number} severity Injury severity (1-3)
+   * @returns {Promise<Object>} Transaction result with recovery time
+   */
+  async applyInjury(playerId, severity) {
+    try {
+      const contract = this.contracts.playerCard.web3;
+      
+      if (!contract) {
+        throw new Error('Player card contract not initialized');
+      }
+      
+      if (!this.walletConnected) {
+        throw new Error('Wallet not connected');
+      }
+      
+      // Prepare transaction
+      const tx = contract.methods.applyInjury(playerId, severity);
+      
+      // Call method first to get recovery time
+      const recovery = await tx.call({ from: this.userAddress });
+      
+      // Estimate gas
+      const gas = await tx.estimateGas({ from: this.userAddress });
+      
+      // Send transaction
+      const receipt = await tx.send({
+        from: this.userAddress,
+        gas
+      });
+      
+      console.log('Injury applied:', receipt);
+      
+      return {
+        success: true,
+        playerId,
+        severity,
+        recovery: parseInt(recovery),
+        transactionHash: receipt.transactionHash,
+        receipt
+      };
+    } catch (error) {
+      console.error('Error applying injury:', error);
+      throw error;
+    }
+  }
+  
+  /**
+   * List a player card on the marketplace
+   * @param {number} playerId Player card ID
+   * @param {string|number} price Price in reward tokens
+   * @returns {Promise<Object>} Transaction result
+   */
+  async listPlayerCardOnMarketplace(playerId, price) {
+    try {
+      const playerCardContract = this.contracts.playerCard.web3;
+      const marketplaceContract = this.contracts.marketplace.web3;
+      
+      if (!playerCardContract || !marketplaceContract) {
+        throw new Error('Required contracts not initialized');
+      }
+      
+      if (!this.walletConnected) {
+        throw new Error('Wallet not connected');
+      }
+      
+      // Check if user owns the player card
+      const owner = await playerCardContract.methods.ownerOf(playerId).call();
+      
+      if (owner.toLowerCase() !== this.userAddress.toLowerCase()) {
+        throw new Error('You do not own this player card');
+      }
+      
+      // Convert price to token units (assuming 18 decimals)
+      const priceInWei = ethers.utils.parseUnits(price.toString(), 18).toString();
+      
+      // Approve marketplace contract to transfer token
+      const approveTx = playerCardContract.methods.approve(
+        this.contractAddresses.marketplace,
+        playerId
+      );
+      
+      // Estimate gas for approve
+      const approveGas = await approveTx.estimateGas({ from: this.userAddress });
+      
+      // Send approve transaction
+      const approveReceipt = await approveTx.send({
+        from: this.userAddress,
+        gas: approveGas
+      });
+      
+      console.log('Marketplace approved for token transfer:', approveReceipt);
+      
+      // List player card
+      const listTx = marketplaceContract.methods.listPlayerCard(
+        playerId,
+        priceInWei
+      );
+      
+      // Estimate gas for listing
+      const listGas = await listTx.estimateGas({ from: this.userAddress });
+      
+      // Send listing transaction
+      const listReceipt = await listTx.send({
+        from: this.userAddress,
+        gas: listGas
+      });
+      
+      console.log('Player card listed on marketplace:', listReceipt);
+      
+      // Get listing ID from event
+      let listingId = null;
+      if (listReceipt.events && listReceipt.events.ItemListed) {
+        listingId = listReceipt.events.ItemListed.returnValues.listingId;
+      }
+      
+      return {
+        success: true,
+        listingId,
+        playerId,
+        price: priceInWei,
+        priceFormatted: price,
+        transactionHash: listReceipt.transactionHash,
+        receipt: listReceipt
+      };
+    } catch (error) {
+      console.error('Error listing player card:', error);
+      throw error;
+    }
+  }
+  
+  /**
+   * List a team on the marketplace
+   * @param {number} teamId Team ID
+   * @param {string|number} price Price in reward tokens
+   * @returns {Promise<Object>} Transaction result
+   */
+  async listTeamOnMarketplace(teamId, price) {
+    try {
+      const teamContract = this.contracts.team.web3;
+      const marketplaceContract = this.contracts.marketplace.web3;
+      
+      if (!teamContract || !marketplaceContract) {
+        throw new Error('Required contracts not initialized');
+      }
+      
+      if (!this.walletConnected) {
+        throw new Error('Wallet not connected');
+      }
+      
+      // Check if user owns the team
+      const owner = await teamContract.methods.ownerOf(teamId).call();
+      
+      if (owner.toLowerCase() !== this.userAddress.toLowerCase()) {
+        throw new Error('You do not own this team');
+      }
+      
+      // Convert price to token units (assuming 18 decimals)
+      const priceInWei = ethers.utils.parseUnits(price.toString(), 18).toString();
+      
+      // Approve marketplace contract to transfer token
+      const approveTx = teamContract.methods.approve(
+        this.contractAddresses.marketplace,
+        teamId
+      );
+      
+      // Estimate gas for approve
+      const approveGas = await approveTx.estimateGas({ from: this.userAddress });
+      
+      // Send approve transaction
+      const approveReceipt = await approveTx.send({
+        from: this.userAddress,
+        gas: approveGas
+      });
+      
+      console.log('Marketplace approved for token transfer:', approveReceipt);
+      
+      // List team
+      const listTx = marketplaceContract.methods.listTeam(
+        teamId,
+        priceInWei
+      );
+      
+      // Estimate gas for listing
+      const listGas = await listTx.estimateGas({ from: this.userAddress });
+      
+      // Send listing transaction
+      const listReceipt = await listTx.send({
+        from: this.userAddress,
+        gas: listGas
+      });
+      
+      console.log('Team listed on marketplace:', listReceipt);
+      
+      // Get listing ID from event
+      let listingId = null;
+      if (listReceipt.events && listReceipt.events.ItemListed) {
+        listingId = listReceipt.events.ItemListed.returnValues.listingId;
+      }
+      
+      return {
+        success: true,
+        listingId,
+        teamId,
+        price: priceInWei,
+        priceFormatted: price,
+        transactionHash: listReceipt.transactionHash,
+        receipt: listReceipt
+      };
+    } catch (error) {
+      console.error('Error listing team:', error);
+      throw error;
+    }
+  }
+  
+  /**
+   * Buy item from marketplace
+   * @param {number} listingId Listing ID
+   * @returns {Promise<Object>} Transaction result
+   */
+  async buyMarketplaceItem(listingId) {
+    try {
+      const marketplaceContract = this.contracts.marketplace.web3;
+      const rewardTokenContract = this.contracts.rewardToken.web3;
+      
+      if (!marketplaceContract || !rewardTokenContract) {
+        throw new Error('Required contracts not initialized');
+      }
+      
+      if (!this.walletConnected) {
+        throw new Error('Wallet not connected');
+      }
+      
+      // Get listing details
+      const listing = await marketplaceContract.methods.listings(listingId).call();
+      
+      // Check if listing is active
+      if (listing.status !== '0') { // 0 = Active
+        throw new Error('Listing is not active');
+      }
+      
+      // Approve marketplace to spend tokens
+      const approveTx = rewardTokenContract.methods.approve(
+        this.contractAddresses.marketplace,
+        listing.price
+      );
+      
+      // Estimate gas for approve
+      const approveGas = await approveTx.estimateGas({ from: this.userAddress });
+      
+      // Send approve transaction
+      const approveReceipt = await approveTx.send({
+        from: this.userAddress,
+        gas: approveGas
+      });
+      
+      console.log('Marketplace approved for token spending:', approveReceipt);
+      
+      // Buy item
+      const buyTx = marketplaceContract.methods.buyItem(listingId);
+      
+      // Estimate gas for buying
+      const buyGas = await buyTx.estimateGas({ from: this.userAddress });
+      
+      // Send buy transaction
+      const buyReceipt = await buyTx.send({
+        from: this.userAddress,
+        gas: buyGas
+      });
+      
+      console.log('Item purchased from marketplace:', buyReceipt);
+      
+      return {
+        success: true,
+        listingId,
+        tokenId: listing.tokenId,
+        price: listing.price,
+        priceFormatted: ethers.utils.formatUnits(listing.price, 18),
+        seller: listing.seller,
+        contractAddress: listing.contractAddress,
+        isPlayerCard: listing.contractAddress === this.contractAddresses.playerCard,
+        isTeam: listing.contractAddress === this.contractAddresses.team,
+        transactionHash: buyReceipt.transactionHash,
+        receipt: buyReceipt
+      };
+    } catch (error) {
+      console.error('Error buying marketplace item:', error);
+      throw error;
+    }
+  }
+  
+  /**
+   * Cancel marketplace listing
+   * @param {number} listingId Listing ID
+   * @returns {Promise<Object>} Transaction result
+   */
+  async cancelMarketplaceListing(listingId) {
+    try {
+      const marketplaceContract = this.contracts.marketplace.web3;
+      
+      if (!marketplaceContract) {
+        throw new Error('Marketplace contract not initialized');
+      }
+      
+      if (!this.walletConnected) {
+        throw new Error('Wallet not connected');
+      }
+      
+      // Get listing details
+      const listing = await marketplaceContract.methods.listings(listingId).call();
+      
+      // Check if listing is active
+      if (listing.status !== '0') { // 0 = Active
+        throw new Error('Listing is not active');
+      }
+      
+      // Check if user is seller
+      if (listing.seller.toLowerCase() !== this.userAddress.toLowerCase()) {
+        throw new Error('You are not the seller of this listing');
+      }
+      
+      // Cancel listing
+      const cancelTx = marketplaceContract.methods.cancelListing(listingId);
+      
+      // Estimate gas
+      const gas = await cancelTx.estimateGas({ from: this.userAddress });
+      
+      // Send transaction
+      const receipt = await cancelTx.send({
+        from: this.userAddress,
+        gas
+      });
+      
+      console.log('Marketplace listing cancelled:', receipt);
+      
+      return {
+        success: true,
+        listingId,
+        transactionHash: receipt.transactionHash,
+        receipt
+      };
+    } catch (error) {
+      console.error('Error cancelling marketplace listing:', error);
+      throw error;
+    }
+  }
+  
+  /**
+   * Update team record after match
+   * @param {number} teamId Team ID
+   * @param {boolean} won Whether team won
+   * @param {boolean} draw Whether match was a draw
+   * @param {number} goalsFor Goals scored
+   * @param {number} goalsAgainst Goals conceded
+   * @returns {Promise<Object>} Transaction result
+   */
+  async updateTeamRecord(teamId, won, draw, goalsFor, goalsAgainst) {
+    try {
+      const contract = this.contracts.team.web3;
+      
+      if (!contract) {
+        throw new Error('Team contract not initialized');
+      }
+      
+      if (!this.walletConnected) {
+        throw new Error('Wallet not connected');
+      }
+      
+      // Check if user owns the team
+      const owner = await contract.methods.ownerOf(teamId).call();
+      
+      if (owner.toLowerCase() !== this.userAddress.toLowerCase()) {
+        throw new Error('You do not own this team');
+      }
+      
+      // Prepare transaction
+      const tx = contract.methods.updateTeamRecord(
+        teamId,
+        won,
+        draw,
+        goalsFor,
+        goalsAgainst
+      );
+      
+      // Estimate gas
+      const gas = await tx.estimateGas({ from: this.userAddress });
+      
+      // Send transaction
+      const receipt = await tx.send({
+        from: this.userAddress,
+        gas
+      });
+      
+      console.log('Team record updated:', receipt);
+      
+      return {
+        success: true,
+        teamId,
+        won,
+        draw,
+        goalsFor,
+        goalsAgainst,
+        transactionHash: receipt.transactionHash,
+        receipt
+      };
+    } catch (error) {
+      console.error('Error updating team record:', error);
+      throw error;
+    }
+  }
+  
+  /**
+   * Record a match played with a player card
+   * @param {number} playerId Player card ID
+   * @returns {Promise<Object>} Transaction result
+   */
+  async recordPlayerMatch(playerId) {
+    try {
+      const contract = this.contracts.playerCard.web3;
+      
+      if (!contract) {
+        throw new Error('Player card contract not initialized');
+      }
+      
+      if (!this.walletConnected) {
+        throw new Error('Wallet not connected');
+      }
+      
+      // Check if user owns the player card
+      const owner = await contract.methods.ownerOf(playerId).call();
+      
+      if (owner.toLowerCase() !== this.userAddress.toLowerCase()) {
+        throw new Error('You do not own this player card');
+      }
+      
+      // Prepare transaction
+      const tx = contract.methods.recordMatch(playerId);
+      
+      // Estimate gas
+      const gas = await tx.estimateGas({ from: this.userAddress });
+      
+      // Send transaction
+      const receipt = await tx.send({
+        from: this.userAddress,
+        gas
+      });
+      
+      console.log('Player match recorded:', receipt);
+      
+      return {
+        success: true,
+        playerId,
+        transactionHash: receipt.transactionHash,
+        receipt
+      };
+    } catch (error) {
+      console.error('Error recording player match:', error);
+      throw error;
+    }
+  }
+  
+  /**
+   * Add experience to player card
+   * @param {number} playerId Player card ID
+   * @param {number} experience Experience points to add
+   * @returns {Promise<Object>} Transaction result
+   */
+  async addPlayerExperience(playerId, experience) {
+    try {
+      const contract = this.contracts.playerCard.web3;
+      
+      if (!contract) {
+        throw new Error('Player card contract not initialized');
+      }
+      
+      if (!this.walletConnected) {
+        throw new Error('Wallet not connected');
+      }
+      
+      // Check if user owns the player card
+      const owner = await contract.methods.ownerOf(playerId).call();
+      
+      if (owner.toLowerCase() !== this.userAddress.toLowerCase()) {
+        throw new Error('You do not own this player card');
+      }
+      
+      // Prepare transaction
+      const tx = contract.methods.addExperience(playerId, experience);
+      
+      // Estimate gas
+      const gas = await tx.estimateGas({ from: this.userAddress });
+      
+      // Send transaction
+      const receipt = await tx.send({
+        from: this.userAddress,
+        gas
+      });
+      
+      console.log('Player experience added:', receipt);
+      
+      return {
+        success: true,
+        playerId,
+        experience,
+        transactionHash: receipt.transactionHash,
+        receipt
+      };
+    } catch (error) {
+      console.error('Error adding player experience:', error);
+      throw error;
+    }
+  }
+}
+
+/**
+ * Tournament Contract Wrapper
+ */
+class TournamentSystem {
+  constructor(smartContractSystem) {
+    this.smartContractSystem = smartContractSystem;
+    this.tournamentContract = null;
+  }
+  
+  /**
+   * Initialize tournament system
+   */
+  initialize() {
+    if (this.smartContractSystem.contracts.tournament) {
+      this.tournamentContract = this.smartContractSystem.contracts.tournament;
+      return true;
+    }
+    return false;
+  }
+  
+  /**
+   * Get active tournaments
+   * @returns {Promise<Array>} Array of active tournaments
+   */
+  async getActiveTournaments() {
+    try {
+      if (!this.tournamentContract) {
+        throw new Error('Tournament contract not initialized');
+      }
+      
+      const contract = this.tournamentContract.ethers;
+      
+      // Get total tournaments
+      const count = await contract.getTournamentCount();
+      const tournaments = [];
+      
+      // Get active tournaments
+      for (let i = 1; i <= count; i++) {
+        const tournament = await contract.tournaments(i);
+        if (tournament.active) {
+          tournaments.push(this._formatTournament(i, tournament));
+        }
+      }
+      
+      return tournaments;
+    } catch (error) {
+      console.error('Error getting active tournaments:', error);
+      throw error;
+    }
+  }
+  
+  /**
+   * Get tournament details
+   * @param {number} tournamentId Tournament ID
+   * @returns {Promise<Object>} Tournament details
+   */
+  async getTournament(tournamentId) {
+    try {
+      if (!this.tournamentContract) {
+        throw new Error('Tournament contract not initialized');
+      }
+      
+      const contract = this.tournamentContract.ethers;
+      
+      // Get tournament
+      const tournament = await contract.tournaments(tournamentId);
+      
+      // Get participants
+      const participants = await contract.getTournamentParticipants(tournamentId);
+      
+      // Get matches
+      const matchCount = await contract.getTournamentMatchCount(tournamentId);
+      const matches = [];
+      
+      for (let i = 0; i < matchCount; i++) {
+        const match = await contract.getTournamentMatch(tournamentId, i);
+        matches.push(this._formatMatch(match));
+      }
+      
+      return {
+        ...this._formatTournament(tournamentId, tournament),
+        participants: participants.map(p => p.toString()),
+        matches
+      };
+    } catch (error) {
+      console.error('Error getting tournament details:', error);
+      throw error;
+    }
+  }
+  
+  /**
+   * Format tournament data
+   * @param {number} id Tournament ID
+   * @param {Object} tournament Tournament data from contract
+   * @returns {Object} Formatted tournament
+   */
+  _formatTournament(id, tournament) {
+    return {
+      id: id,
+      name: tournament.name,
+      description: tournament.description,
+      creator: tournament.creator,
+      entryFee: tournament.entryFee.toString(),
+      entryFeeFormatted: ethers.utils.formatUnits(tournament.entryFee, 18),
+      maxParticipants: tournament.maxParticipants.toNumber(),
+      startTime: new Date(tournament.startTime.toNumber() * 1000).toISOString(),
+      endTime: new Date(tournament.endTime.toNumber() * 1000).toISOString(),
+      active: tournament.active,
+      completed: tournament.completed,
+      winner: tournament.winner,
+      prizePool: tournament.prizePool.toString(),
+      prizePoolFormatted: ethers.utils.formatUnits(tournament.prizePool, 18),
+      tournamentType: ['League', 'Knockout', 'Group Stage'][tournament.tournamentType],
+      nftRequired: tournament.nftRequired
+    };
+  }
+  
+  /**
+   * Format match data
+   * @param {Object} match Match data from contract
+   * @returns {Object} Formatted match
+   */
+  _formatMatch(match) {
+    return {
+      id: match.id.toNumber(),
+      team1: match.team1.toNumber(),
+      team2: match.team2.toNumber(),
+      winner: match.winner.toNumber(),
+      score1: match.score1.toNumber(),
+      score2: match.score2.toNumber(),
+      played: match.played,
+      scheduledTime: new Date(match.scheduledTime.toNumber() * 1000).toISOString(),
+      actualTime: match.actualTime.toNumber() > 0 ? 
+        new Date(match.actualTime.toNumber() * 1000).toISOString() : null,
+      round: match.round.toNumber()
+    };
+  }
+  
+  /**
+   * Register for tournament
+   * @param {number} tournamentId Tournament ID
+   * @param {number} teamId Team ID to register
+   * @returns {Promise<Object>} Transaction result
+   */
+  async registerForTournament(tournamentId, teamId) {
+    try {
+      if (!this.tournamentContract) {
+        throw new Error('Tournament contract not initialized');
+      }
+      
+      if (!this.smartContractSystem.walletConnected) {
+        throw new Error('Wallet not connected');
+      }
+      
+      const contract = this.tournamentContract.web3;
+      const rewardTokenContract = this.smartContractSystem.contracts.rewardToken.web3;
+      
+      // Get tournament details
+      const tournament = await contract.methods.tournaments(tournamentId).call();
+      
+      // Approve token spending for entry fee
+      const approveTx = rewardTokenContract.methods.approve(
+        this.tournamentContract.address,
+        tournament.entryFee
+      );
+      
+      // Estimate gas for approve
+      const approveGas = await approveTx.estimateGas({ from: this.smartContractSystem.userAddress });
+      
+      // Send approve transaction
+      const approveReceipt = await approveTx.send({
+        from: this.smartContractSystem.userAddress,
+        gas: approveGas
+      });
+      
+      console.log('Tournament contract approved for token spending:', approveReceipt);
+      
+      // Register for tournament
+      const registerTx = contract.methods.registerForTournament(tournamentId, teamId);
+      
+      // Estimate gas
+      const registerGas = await registerTx.estimateGas({ from: this.smartContractSystem.userAddress });
+      
+      // Send transaction
+      const receipt = await registerTx.send({
+        from: this.smartContractSystem.userAddress,
+        gas: registerGas
+      });
+      
+      console.log('Registered for tournament:', receipt);
+      
+      return {
+        success: true,
+        tournamentId,
+        teamId,
+        entryFee: tournament.entryFee,
+        entryFeeFormatted: ethers.utils.formatUnits(tournament.entryFee, 18),
+        transactionHash: receipt.transactionHash,
+        receipt
+      };
+    } catch (error) {
+      console.error('Error registering for tournament:', error);
+      throw error;
+    }
+  }
+  
+  /**
+   * Submit match result (for tournament participants)
+   * @param {number} tournamentId Tournament ID
+   * @param {number} matchId Match ID
+   * @param {number} score1 Team 1 score
+   * @param {number} score2 Team 2 score
+   * @returns {Promise<Object>} Transaction result
+   */
+  async submitMatchResult(tournamentId, matchId, score1, score2) {
+    try {
+      if (!this.tournamentContract) {
+        throw new Error('Tournament contract not initialized');
+      }
+      
+      if (!this.smartContractSystem.walletConnected) {
+        throw new Error('Wallet not connected');
+      }
+      
+      const contract = this.tournamentContract.web3;
+      
+      // Submit match result
+      const tx = contract.methods.submitMatchResult(tournamentId, matchId, score1, score2);
+      
+      // Estimate gas
+      const gas = await tx.estimateGas({ from: this.smartContractSystem.userAddress });
+      
+      // Send transaction
+      const receipt = await tx.send({
+        from: this.smartContractSystem.userAddress,
+        gas
+      });
+      
+      console.log('Match result submitted:', receipt);
+      
+      return {
+        success: true,
+        tournamentId,
+        matchId,
+        score1,
+        score2,
+        transactionHash: receipt.transactionHash,
+        receipt
+      };
+    } catch (error) {
+      console.error('Error submitting match result:', error);
+      throw error;
+    }
+  }
+  
+  /**
+   * Withdraw tournament winnings
+   * @param {number} tournamentId Tournament ID
+   * @returns {Promise<Object>} Transaction result
+   */
+  async withdrawTournamentWinnings(tournamentId) {
+    try {
+      if (!this.tournamentContract) {
+        throw new Error('Tournament contract not initialized');
+      }
+      
+      if (!this.smartContractSystem.walletConnected) {
+        throw new Error('Wallet not connected');
+      }
+      
+      const contract = this.tournamentContract.web3;
+      
+      // Check if tournament is completed
+      const tournament = await contract.methods.tournaments(tournamentId).call();
+      
+      if (!tournament.completed) {
+        throw new Error('Tournament is not completed yet');
+      }
+      
+      // Check if user is the winner
+      if (tournament.winner.toLowerCase() !== this.smartContractSystem.userAddress.toLowerCase()) {
+        throw new Error('You are not the winner of this tournament');
+      }
+      
+      // Withdraw winnings
+      const tx = contract.methods.withdrawPrize(tournamentId);
+      
+      // Estimate gas
+      const gas = await tx.estimateGas({ from: this.smartContractSystem.userAddress });
+      
+      // Send transaction
+      const receipt = await tx.send({
+        from: this.smartContractSystem.userAddress,
+        gas
+      });
+      
+      console.log('Tournament winnings withdrawn:', receipt);
+      
+      return {
+        success: true,
+        tournamentId,
+        prizeAmount: tournament.prizePool,
+        prizeAmountFormatted: ethers.utils.formatUnits(tournament.prizePool, 18),
+        transactionHash: receipt.transactionHash,
+        receipt
+      };
+    } catch (error) {
+      console.error('Error withdrawing tournament winnings:', error);
+      throw error;
+    }
+  }
+  
+  /**
+   * Create tournament (admin function)
+   * @param {Object} tournamentData Tournament data
+   * @returns {Promise<Object>} Transaction result
+   */
+  async createTournament(tournamentData) {
+    try {
+      if (!this.tournamentContract) {
+        throw new Error('Tournament contract not initialized');
+      }
+      
+      if (!this.smartContractSystem.walletConnected) {
+        throw new Error('Wallet not connected');
+      }
+      
+      const contract = this.tournamentContract.web3;
+      
+      // Convert entry fee to token units
+      const entryFee = ethers.utils.parseUnits(
+        tournamentData.entryFee.toString(),
+        18
+      ).toString();
+      
+      // Convert timestamps to seconds
+      const startTime = Math.floor(new Date(tournamentData.startTime).getTime() / 1000);
+      const endTime = Math.floor(new Date(tournamentData.endTime).getTime() / 1000);
+      
+      // Determine tournament type
+      let tournamentType = 0; // Default to league
+      if (tournamentData.tournamentType === 'knockout') {
+        tournamentType = 1;
+      } else if (tournamentData.tournamentType === 'group') {
+        tournamentType = 2;
+      }
+      
+      // Create tournament
+      const tx = contract.methods.createTournament(
+        tournamentData.name,
+        tournamentData.description,
+        entryFee,
+        tournamentData.maxParticipants,
+        startTime,
+        endTime,
+        tournamentType,
+        tournamentData.nftRequired || false
+      );
+      
+      // Estimate gas
+      const gas = await tx.estimateGas({ from: this.smartContractSystem.userAddress });
+      
+      // Send transaction
+      const receipt = await tx.send({
+        from: this.smartContractSystem.userAddress,
+        gas
+      });
+      
+      console.log('Tournament created:', receipt);
+      
+      // Get tournament ID from event
+      let tournamentId = null;
+      if (receipt.events && receipt.events.TournamentCreated) {
+        tournamentId = receipt.events.TournamentCreated.returnValues.tournamentId;
+      }
+      
+      return {
+        success: true,
+        tournamentId,
+        transactionHash: receipt.transactionHash,
+        receipt
+      };
+    } catch (error) {
+      console.error('Error creating tournament:', error);
+      throw error;
+    }
+  }
+}
+
+/**
+ * Factory for creating smart contract instances
+ */
+class SmartContractFactory {
+  /**
+   * Create a player card contract instance
+   * @param {Object} options Contract creation options
+   * @returns {Promise<Object>} Deployment result
+   */
+  static async deployPlayerCardContract(options) {
+    try {
+      // Implementation would deploy contract
+      throw new Error('Contract deployment not implemented');
+    } catch (error) {
+      console.error('Error deploying player card contract:', error);
+      throw error;
+    }
+  }
+  
+  /**
+   * Create a team contract instance
+   * @param {Object} options Contract creation options
+   * @returns {Promise<Object>} Deployment result
+   */
+  static async deployTeamContract(options) {
+    try {
+      // Implementation would deploy contract
+      throw new Error('Contract deployment not implemented');
+    } catch (error) {
+      console.error('Error deploying team contract:', error);
+      throw error;
+    }
+  }
+  
+  /**
+   * Create a reward token contract instance
+   * @param {Object} options Contract creation options
+   * @returns {Promise<Object>} Deployment result
+   */
+  static async deployRewardTokenContract(options) {
+    try {
+      // Implementation would deploy contract
+      throw new Error('Contract deployment not implemented');
+    } catch (error) {
+      console.error('Error deploying reward token contract:', error);
+      throw error;
+    }
+  }
+  
+  /**
+   * Create a marketplace contract instance
+   * @param {Object} options Contract creation options
+   * @returns {Promise<Object>} Deployment result
+   */
+  static async deployMarketplaceContract(options) {
+    try {
+      // Implementation would deploy contract
+      throw new Error('Contract deployment not implemented');
+    } catch (error) {
+      console.error('Error deploying marketplace contract:', error);
+      throw error;
+    }
+  }
+  
+  /**
+   * Create a tournament contract instance
+   * @param {Object} options Contract creation options
+   * @returns {Promise<Object>} Deployment result
+   */
+  static async deployTournamentContract(options) {
+    try {
+      // Implementation would deploy contract
+      throw new Error('Contract deployment not implemented');
+    } catch (error) {
+      console.error('Error deploying tournament contract:', error);
+      throw error;
+    }
+  }
+}
+
+/**
+ * Provider for blockchain data feeds and oracles
+ */
+class BlockchainDataProvider {
+  constructor(config) {
+    this.config = config;
+    this.provider = null;
+    this.initialized = false;
+  }
+  
+  /**
+   * Initialize data provider
+   * @returns {Promise<boolean>} Initialization result
+   */
+  async initialize() {
+    try {
+      // Initialize provider
+      this.provider = new ethers.providers.JsonRpcProvider(this.config.providerUrl);
+      this.initialized = true;
+      return true;
+    } catch (error) {
+      console.error('Error initializing blockchain data provider:', error);
+      return false;
+    }
+  }
+  
+  /**
+   * Get latest football match results
+   * @returns {Promise<Array>} Array of match results
+   */
+  async getFootballMatchResults() {
+    try {
+      if (!this.initialized) {
+        throw new Error('Data provider not initialized');
+      }
+      
+      // In a real implementation, this would query an oracle contract
+      // For this example, return mock data
+      return [
+        {
+          matchId: '1',
+          homeTeam: 'Team A',
+          awayTeam: 'Team B',
+          homeScore: 2,
+          awayScore: 1,
+          matchDate: new Date().toISOString(),
+          league: 'Premier League',
+          season: '2023/2024'
+        }
+      ];
+    } catch (error) {
+      console.error('Error getting football match results:', error);
+      throw error;
+    }
+  }
+  
+  /**
+   * Get player performance data
+   * @param {string} playerId External player ID
+   * @returns {Promise<Object>} Player performance data
+   */
+  async getPlayerPerformance(playerId) {
+    try {
+      if (!this.initialized) {
+        throw new Error('Data provider not initialized');
+      }
+      
+      // In a real implementation, this would query an oracle contract
+      // For this example, return mock data
+      return {
+        playerId,
+        name: 'Player Name',
+        team: 'Team Name',
+        position: 'Forward',
+        goals: 10,
+        assists: 5,
+        appearances: 20,
+        minutesPlayed: 1800,
+        rating: 8.5,
+        season: '2023/2024'
+      };
+    } catch (error) {
+      console.error('Error getting player performance:', error);
+      throw error;
+    }
+  }
+}
+
+/**
+ * Age Verification and KYC Integration for Blockchain
+ */
+class BlockchainAgeVerification {
+  constructor(smartContractSystem) {
+    this.smartContractSystem = smartContractSystem;
+    this.verificationContract = null;
+  }
+  
+  /**
+   * Initialize age verification
+   */
+  initialize() {
+    if (this.smartContractSystem.contracts.ageVerification) {
+      this.verificationContract = this.smartContractSystem.contracts.ageVerification;
+      return true;
+    }
+    return false;
+  }
+  
+  /**
+   * Submit KYC information
+   * @param {Object} kycData KYC data
+   * @returns {Promise<Object>} Submission result
+   */
+  async submitKyc(kycData) {
+    try {
+      if (!this.verificationContract) {
+        throw new Error('Verification contract not initialized');
+      }
+      
+      if (!this.smartContractSystem.walletConnected) {
+        throw new Error('Wallet not connected');
+      }
+      
+      // Hash sensitive information
+      const dataHash = keccak256(
+        AbiCoder.prototype.encode(
+          ['string', 'string', 'uint256'],
+          [kycData.fullName, kycData.documentId, kycData.dateOfBirth]
+        )
+      );
+      
+      // Submit verification request
+      const tx = this.verificationContract.web3.methods.submitVerification(
+        dataHash,
+        kycData.verificationLevel || 1
+      );
+      
+      // Estimate gas
+      const gas = await tx.estimateGas({ from: this.smartContractSystem.userAddress });
+      
+      // Send transaction
+      const receipt = await tx.send({
+        from: this.smartContractSystem.userAddress,
+        gas
+      });
+      
+      console.log('KYC submitted:', receipt);
+      
+      return {
+        success: true,
+        verificationId: receipt.events.VerificationSubmitted?.returnValues.verificationId,
+        transactionHash: receipt.transactionHash,
+        receipt
+      };
+    } catch (error) {
+      console.error('Error submitting KYC:', error);
+      throw error;
+    }
+  }
+  
+  /**
+   * Check verification status
+   * @returns {Promise<Object>} Verification status
+   */
+  async checkVerificationStatus() {
+    try {
+      if (!this.verificationContract) {
+        throw new Error('Verification contract not initialized');
+      }
+      
+      if (!this.smartContractSystem.walletConnected) {
+        throw new Error('Wallet not connected');
+      }
+      
+      // Get verification status
+      const status = await this.verificationContract.ethers.getVerificationStatus(
+        this.smartContractSystem.userAddress
+      );
+      
+      return {
+        isVerified: status.isVerified,
+        verificationLevel: status.level.toNumber(),
+        timestamp: new Date(status.timestamp.toNumber() * 1000).toISOString(),
+        isUnderage: status.isUnderage,
+        unlockTime: status.unlockTime.toNumber() > 0 ? 
+          new Date(status.unlockTime.toNumber() * 1000).toISOString() : null
+      };
+    } catch (error) {
+      console.error('Error checking verification status:', error);
+      throw error;
+    }
+  }
+}
+
+// Export classes
+export {
+  SmartContractSystem,
+  TournamentSystem,
+  SmartContractFactory,
+  BlockchainDataProvider,
+  BlockchainAgeVerification
+};
+// FootballChess Smart Contract Integration System
+// Provides integration with blockchain for game assets, trading, and tournaments
+
+import Web3 from 'web3';
+import { ethers } from 'ethers';
+import { Contract as EthersContract } from '@ethersproject/contracts';
+import { AbiCoder } from '@ethersproject/abi';
+import { keccak256 } from '@ethersproject/keccak256';
+import { toUtf8Bytes } from '@ethersproject/strings';
+
+/**
+ * Smart contract integration for the FootballChess game
+ */
+class SmartContractSystem {
+  constructor(config) {
+    this.config = config;
+    this.web3 = null;
+    this.ethersProvider = null;
+    this.signer = null;
+    this.contracts = {};
+    this.walletConnected = false;
+    this.contractAddresses = config.contractAddresses || {};
+    this.networkId = null;
+    this.userAddress = null;
+    this.contractCache = new Map(); // Cache for contract instances
+  }
+  
+  /**
+   * Initialize the smart contract system
+   * @returns {Promise<boolean>} Initialization result
+   */
+  async initialize() {
+    try {
+      // Initialize Web3 provider
+      if (window.ethereum) {
+        // Modern dapp browsers
+        this.web3 = new Web3(window.ethereum);
+        this.ethersProvider = new ethers.providers.Web3Provider(window.ethereum);
+      } else if (window.web3) {
+        // Legacy dapp browsers
+        this.web3 = new Web3(window.web3.currentProvider);
+        this.ethersProvider = new ethers.providers.Web3Provider(window.web3.currentProvider);
+      } else {
+        // Fallback to read-only mode with provider URL
+        this.web3 = new Web3(new Web3.providers.HttpProvider(this.config.providerUrl));
+        this.ethersProvider = new ethers.providers.JsonRpcProvider(this.config.providerUrl);
+      }
+      
+      // Get network ID
+      this.networkId = await this.web3.eth.net.getId();
+      
+      // Check if on correct network
+      const targetNetworkId = this.config.networkId || 1; // Default to Ethereum mainnet
+      
+      if (this.networkId !== targetNetworkId) {
+        console.warn(`Connected to network ${this.networkId}, but target network is ${targetNetworkId}`);
+      }
+      
+      // Initialize contract ABIs
+      await this._initializeContracts();
+      
+      console.log('Smart contract system initialized');
+      return true;
+    } catch (error) {
+      console.error('Error initializing smart contract system:', error);
+      return false;
+    }
+  }
+  
+  /**
+   * Initialize contract instances
+   * @returns {Promise<void>}
+   */
+  async _initializeContracts() {
+    // Initialize FootballChessPlayerCard contract
+    if (this.contractAddresses.playerCard) {
+      await this._initializeContract('playerCard', this.contractAddresses.playerCard, require('../abis/FootballChessPlayerCard.json'));
+    }
+    
+    // Initialize FootballChessTeam contract
+    if (this.contractAddresses.team) {
+      await this._initializeContract('team', this.contractAddresses.team, require('../abis/FootballChessTeam.json'));
+    }
+    
+    // Initialize FootballChessRewardToken contract
+    if (this.contractAddresses.rewardToken) {
+      await this._initializeContract('rewardToken', this.contractAddresses.rewardToken, require('../abis/FootballChessRewardToken.json'));
+    }
+    
+    // Initialize FootballChessMarketplace contract
+    if (this.contractAddresses.marketplace) {
+      await this._initializeContract('marketplace', this.contractAddresses.marketplace, require('../abis/FootballChessMarketplace.json'));
+    }
+    
+    // Initialize FootballChessTournament contract
+    if (this.contractAddresses.tournament) {
+      await this._initializeContract('tournament', this.contractAddresses.tournament, require('../abis/FootballChessTournament.json'));
+    }
+  }
+  
+  /**
+   * Initialize a specific contract
+   * @param {string} contractName Name for the contract
+   * @param {string} address Contract address
+   * @param {Object} abi Contract ABI
+   * @returns {Promise<void>}
+   */
+  async _initializeContract(contractName, address, abi) {
+    try {
+      // Create Web3 contract instance
+      const web3Contract = new this.web3.eth.Contract(abi, address);
+      
+      // Create ethers contract instance (for read-only operations)
+      const ethersContract = new EthersContract(address, abi, this.ethersProvider);
+      
+      // Store both instances
+      this.contracts[contractName] = {
+        web3: web3Contract,
+        ethers: ethersContract,
+        address,
+        abi
+      };
+      
+      console.log(`Initialized ${contractName} contract at ${address}`);
+    } catch (error) {
+      console.error(`Error initializing ${contractName} contract:`, error);
+    }
+  }
+  
+  /**
+   * Connect wallet
+   * @returns {Promise<string|null>} Connected address or null if failed
+   */
+  async connectWallet() {
+    try {
+      if (!window.ethereum) {
+        throw new Error('No Ethereum provider found. Please install MetaMask or another wallet.');
+      }
+      
+      // Request account access
+      await window.ethereum.request({ method: 'eth_requestAccounts' });
+      
+      // Get connected accounts
+      const accounts = await this.web3.eth.getAccounts();
+      
+      if (accounts.length === 0) {
+        throw new Error('No accounts found. Please unlock your wallet.');
+      }
+      
+      // Store user address
+      this.userAddress = accounts[0];
+      
+      // Get ethers signer
+      this.signer = this.ethersProvider.getSigner();
+      
+      // Update contract instances with signer
+      for (const contractName in this.contracts) {
+        const contract = this.contracts[contractName];
+        contract.ethers = new EthersContract(contract.address, contract.abi, this.signer);
+      }
+      
+      this.walletConnected = true;
+      console.log(`Wallet connected: ${this.userAddress}`);
+      
+      // Set up wallet event listeners
+      this._setupWalletListeners();
+      
+      return this.userAddress;
+    } catch (error) {
+      console.error('Error connecting wallet:', error);
+      return null;
+    }
+  }
+  
+  /**
+   * Set up wallet event listeners
+   */
+  _setupWalletListeners() {
+    if (!window.ethereum) return;
+    
+    // Handle account changes
+    window.ethereum.on('accountsChanged', (accounts) => {
+      if (accounts.length === 0) {
+        console.log('Wallet disconnected');
+        this.userAddress = null;
+        this.walletConnected = false;
+      } else {
+        this.userAddress = accounts[0];
+        console.log(`Wallet changed: ${this.userAddress}`);
+      }
+    });
+    
+    // Handle chain changes
+    window.ethereum.on('chainChanged', (chainId) => {
+      console.log(`Chain changed to ${chainId}`);
+      // Reload page on chain change
+      window.location.reload();
+    });
+  }
+  
+  /**
+   * Get player card details
+   * @param {number} tokenId Token ID of the player card
+   * @returns {Promise<Object>} Player card details
+   */
+  async getPlayerCard(tokenId) {
+    try {
+      const contract = this.contracts.playerCard.ethers;
+      
+      if (!contract) {
+        throw new Error('Player card contract not initialized');
+      }
+      
+      // Get card attributes from contract
+      const cardData = await contract.playerCards(tokenId);
+      
+      // Format the response
+      const playerCard = {
+        tokenId,
+        position: cardData.position,
+        rating: cardData.rating,
+        number: cardData.number,
+        movementType: cardData.movementType,
+        speed: cardData.speed,
+        passing: cardData.passing,
+        shooting: cardData.shooting,
+        defending: cardData.defending,
+        durability: cardData.durability,
+        experience: cardData.experience.toNumber(),
+        createdAt: new Date(cardData.createdAt.toNumber() * 1000).toISOString(),
+        legendary: cardData.legendary,
+        matchesPlayed: cardData.matchesPlayed.toNumber(),
+        owner: await this._getTokenOwner('playerCard', tokenId)
+      };
+      
+      return playerCard;
+    } catch (error) {
+      console.error('Error getting player card:', error);
+      throw error;
+    }
+  }
+  
+  /**
+   * Get team details
+   * @param {number} tokenId Token ID of the team
+   * @returns {Promise<Object>} Team details
+   */
+  async getTeam(tokenId) {
+    try {
+      const contract = this.contracts.team.ethers;
+      
+      if (!contract) {
+        throw new Error('Team contract not initialized');
+      }
+      
+      // Get team attributes from contract
+      const teamData = await contract.teams(tokenId);
+      
+      // Format the response
+      const team = {
+        tokenId,
+        name: teamData.name,
+        country: teamData.country,
+        formation: teamData.formation,
+        rating: teamData.rating,
+        primaryColor: teamData.primaryColor,
+        secondaryColor: teamData.secondaryColor,
+        logoURI: teamData.logoURI,
+        createdAt: new Date(teamData.createdAt.toNumber() * 1000).toISOString(),
+        wins: teamData.wins.toNumber(),
+        draws: teamData.draws.toNumber(),
+        losses: teamData.losses.toNumber(),
+        goalsScored: teamData.goalsScored.toNumber(),
+        goalsConceded: teamData.goalsConceded.toNumber(),
+        owner: await this._getTokenOwner('team', tokenId)
+      };
+      
+      // Get team players
+      if (this.contracts.playerCard.ethers) {
+        const playerContract = this.contracts.playerCard.ethers;
+        const teamPlayers = await playerContract.getTeamPlayers(tokenId);
+        team.players = teamPlayers.map(id => id.toNumber());
+      }
+      
+      return team;
+    } catch (error) {
+      console.error('Error getting team:', error);
+      throw error;
+    }
+  }
+  
+  /**
+   * Get token owner
+   * @param {string} contractName Contract name ('playerCard' or 'team')
+   * @param {number} tokenId Token ID
+   * @returns {Promise<string>} Owner address
+   */
+  async _getTokenOwner(contractName, tokenId) {
+    try {
+      const contract = this.contracts[contractName].ethers;
+      
+      if (!contract) {
+        throw new Error(`${contractName} contract not initialized`);
+      }
+      
+      // Call ownerOf function
+      const owner = await contract.ownerOf(tokenId);
+      return owner;
+    } catch (error) {
+      console.error(`Error getting token owner for ${contractName} ${tokenId}:`, error);
+      return null;
+    }
+  }
+  
+  /**
+   * Get user's player cards
+   * @param {string} address User address (defaults to connected wallet)
+   * @returns {Promise<Array>} Array of player card token IDs
+   */
+  async getUserPlayerCards(address = null) {
+    try {
+      const contract = this.contracts.playerCard.ethers;
+      
+      if (!contract) {
+        throw new Error('Player card contract not initialized');
+      }
+      
+      const userAddress = address || this.userAddress;
+      
+      if (!userAddress) {
+        throw new Error('No user address provided and wallet not connected');
+      }
+      
+      // Get balance of user
+      const balance = await contract.balanceOf(userAddress);
+      const tokenIds = [];
+      
+      // Get

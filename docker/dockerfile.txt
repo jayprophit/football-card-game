@@ -1,0 +1,17 @@
+FROM node:16-alpine
+
+# Create app directory
+WORKDIR /app
+
+# Install app dependencies
+COPY package*.json ./
+RUN npm install
+
+# Add source code
+COPY . .
+
+# Expose the port the app runs on
+EXPOSE 1234
+
+# Command to run the app
+CMD ["npm", "start"]
